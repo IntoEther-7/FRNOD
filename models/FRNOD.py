@@ -204,16 +204,19 @@ class FRNOD(nn.Module):
         regression_loss /= torch.max(num_pos, torch.ones_like(num_pos))
         return regression_loss
 
-    def forward_train(self, support_imgs, query_imgs, bboxes_gt, labels, scale=1.):
+    def forward_train(self, s_c=None, s_n=None, q_c=None, bboxes_gt=None, labels=None, scale=1.):
 
-        print(query_imgs.shape)
+        print(q_c.shape)
         # 计算特征图
-        support = self.extract_features(support_imgs)
-        query_feature = self.extract_features(query_imgs)
+        support_c = self.extract_features(s_c)
+        if s_n:
+            support_n = self.extract_features(s_n)
+        query_feature = self.extract_features(q_c)
+
 
         # 获取roi
-        n_support = support.shape[0]
-        img_size = query_imgs.shape[2:]
+        n_support = support_c.shape[0]
+        img_size = q_c.shape[2:]
         # * rpn_locs：rpn对位置的修正，大小[1, all_anchor_num, 4]
         # * rpn_scores ：rpn判断区域前景背景，大小[1, all_anchor_num, 2]
         # * rois：rpn筛选出的roi的位置，大小[final_rpn_num， 4]
@@ -225,7 +228,7 @@ class FRNOD(nn.Module):
         rpn_loc_loss_all, rpn_cls_loss_all, roi_loc_loss_all, roi_cls_loss_all = 0, 0, 0, 0
         sample_rois, sample_indexes, gt_roi_locs, gt_roi_labels = [], [], [], []
 
-        n = query_imgs.shape[0]
+        n = q_c.shape[0]
         # bboxes_gt: (图片数n, 框数k, 参数4)
         for i in range(n):
             bbox = bboxes_gt[i]
@@ -271,7 +274,7 @@ class FRNOD(nn.Module):
         # 重新定位
         # head
         # roi_cls_locs, roi_scores = self.model_train([base_feature, sample_rois, sample_indexes, img_size], mode='head')
-        roi_cls_locs, roi_scores = self.head.forward(support=support, query=query_feature, query_rois=rois,
+        roi_cls_locs, roi_scores = self.head.forward(support=support_c, query=query_feature, query_rois=rois,
                                                      roi_indices=roi_indices, img_size=img_size)
 
         for i in range(n):
@@ -527,9 +530,9 @@ if __name__ == '__main__':
     boxes_np = bboxs.numpy()
 
     # labels = [random.randint(0, way) for i in range(bboxs.shape[0])]
-    labels = torch.randint(0, way, size=[bboxs.shape[0]*bboxs.shape[1]])
+    labels = torch.randint(0, way, size=[bboxs.shape[0] * bboxs.shape[1]])
 
     # print(bboxs)
 
     model = FRNOD(way=10, shot=114, num_categories=3).cuda()
-    model.forward_train(support_imgs=support, query_imgs=query, bboxes_gt=boxes_np, labels=labels)
+    model.forward_train(s_c=support, q_c=query, bboxes_gt=boxes_np, labels=labels)

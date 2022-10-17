@@ -11,6 +11,18 @@ import random
 from torchvision.transforms import transforms
 
 
+# def n_way_k_shot(root, dataset: coco.COCO, catId: int, way: int, support_shot: int = 2,
+#                  query_shot: int = 5):
+#     sample_range = random.sample(dataset.cats.keys(), way + 1)
+#     print(sample_range)
+#     if catId in sample_range:
+#         sample_range.remove(catId)
+#     else:
+#         sample_range = sample_range[:way]
+#     print(sample_range)
+#     pass
+
+
 def one_way_k_shot(root, dataset: coco.COCO, catId: int, support_shot: int = 2,
                    query_shot: int = 5):
     r"""
@@ -94,11 +106,12 @@ def crop_support(imgPath, bbox, is_show=False):
         img_crop.show()
     return img_crop  # type: PIL.Image
 
+
 # if __name__ == '__main__':
 #     root = '../../datasets/fsod/'
 #     train_json = os.path.join(root, 'annotations/fsod_train.json')
 #     test_json = os.path.join(root, 'annotations/fsod_test.json')
-#     fsod = coco.COCO(annotation_file=train_json)
-#     catId = 1
-#     print(one_way_k_shot(fsod, catId))
-#
+#     fsod = coco.COCO(annotation_file=test_json)
+#     catId = 20
+#     random.seed(114514)
+#     n_way_k_shot(root=root, dataset=fsod, catId=catId, way=5)
