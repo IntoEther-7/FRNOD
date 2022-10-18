@@ -3,18 +3,23 @@
 # AUTHOR: 17795
 # TIME: 2022-10-16 16:34
 import random
+import time
+
 from tqdm import tqdm
 from torch.utils.data.dataset import Dataset
 from pycocotools.coco import COCO
 from utils.dataset_tools.support_query_constructor import one_way_k_shot
 
 
+# __C.PIXEL_MEANS = np.array([[[102.9801, 115.9465, 122.7717]]])
+
 class FsodDataset(Dataset):
     def __init__(self, root, annFile, support_shot=2, query_shot=5, img_transform=None, target_transform=None,
-                 seed=None):
+                 seed=None, init=True):
         super(FsodDataset, self).__init__()
         self.root = root
         self.coco = COCO(annFile)
+        time.sleep(0.001)
         self.img_transform = img_transform
         self.target_transform = target_transform
         self.support_shot = support_shot
@@ -26,14 +31,15 @@ class FsodDataset(Dataset):
         self.support_list = []
         self.query_list = []
         self.query_anns_list = []
-        print('正在为每个类别生成support和query')
-        for catId, cat in tqdm(self.coco.cats.items()):
-            support, query, query_anns = one_way_k_shot(root=self.root, dataset=self.coco, catId=catId,
-                                                        support_shot=self.support_shot,
-                                                        query_shot=self.query_shot)
-            self.support_list.append(support)
-            self.query_list.append(query)
-            self.query_anns_list.append(query_anns)
+        if init:
+            print('正在为每个类别生成support和query')
+            for catId, cat in tqdm(self.coco.cats.items()):
+                support, query, query_anns = one_way_k_shot(root=self.root, dataset=self.coco, catId=catId,
+                                                            support_shot=self.support_shot,
+                                                            query_shot=self.query_shot)
+                self.support_list.append(support)
+                self.query_list.append(query)
+                self.query_anns_list.append(query_anns)
 
     def categories(self):
         return self.coco.cats

@@ -209,10 +209,9 @@ class FRNOD(nn.Module):
         print(q_c.shape)
         # 计算特征图
         support_c = self.extract_features(s_c)
-        if s_n:
+        if not s_n is None:
             support_n = self.extract_features(s_n)
         query_feature = self.extract_features(q_c)
-
 
         # 获取roi
         n_support = support_c.shape[0]
@@ -231,7 +230,7 @@ class FRNOD(nn.Module):
         n = q_c.shape[0]
         # bboxes_gt: (图片数n, 框数k, 参数4)
         for i in range(n):
-            bbox = bboxes_gt[i]
+            bbox = bboxes_gt[i] #
             label = labels[i]
             rpn_loc = rpn_locs[i]
             rpn_score = rpn_scores[i]

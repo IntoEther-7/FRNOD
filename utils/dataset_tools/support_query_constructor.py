@@ -52,7 +52,7 @@ def one_way_k_shot(root, dataset: coco.COCO, catId: int, support_shot: int = 2,
     query_anns = []  # type:list
     for imgInfo in dataset.loadImgs(ids=query_imgIds):
         imgPath = os.path.join(root, 'images', imgInfo['file_name'])
-        img = PIL.Image.open(imgPath)
+        img = PIL.Image.open(imgPath).convert('RGB')
         query.append(img)
         annIds = dataset.getAnnIds(imgIds=[imgInfo['id']], catIds=catId)
         query_anns.append([dataset.loadAnns(annId) for annId in annIds])
@@ -94,7 +94,7 @@ def crop_support(imgPath, bbox, is_show=False):
     :return: 裁剪的图像 img_crop (PIL.Image)
     """
     x1, y1, w, h = bbox
-    img = PIL.Image.open(imgPath)
+    img = PIL.Image.open(imgPath).convert('RGB')
     # toTensor = transforms.ToTensor()
     # imgTensor = toTensor(img)  # (channel, hight, width)
     # print(imgTensor.shape)
