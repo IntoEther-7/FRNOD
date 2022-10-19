@@ -27,7 +27,7 @@ if __name__ == '__main__':
     root = 'datasets/fsod'
     train_json = 'datasets/fsod/annotations/fsod_train.json'
     test_json = 'datasets/fsod/annotations/fsod_test.json'
-    fsod = FsodDataset(root, test_json, support_shot=2, query_shot=2)
+    fsod = FsodDataset(root, train_json, support_shot=2, query_shot=2)
 
     way = 2
     support_shot = 2
@@ -90,7 +90,7 @@ if __name__ == '__main__':
     # COCOeval()
 
     # 训练
-    loss_list
+    loss_list = []
     for i in range(1, 801):
         print('--------------------epoch:   {}--------------------'.format(i))
         s_c, s_n, q_c_list, q_anns = fsod.triTuple(catId=i)
@@ -101,5 +101,9 @@ if __name__ == '__main__':
         loss.backward()
         optimizer.step()
         print('loss:    ', loss)
+        loss_list.append(loss)
         if i % 10 == 0:
             torch.save({'model': frnod.state_dict()}, 'weights/frnod{}.pth'.format(i))
+
+    with open('weights/loss_list.json', 'w') as f:
+        json.dump(losses, f)

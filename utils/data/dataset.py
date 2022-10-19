@@ -75,13 +75,16 @@ class FsodDataset(Dataset):
         :return: s_c, s_n, q_c, q_anns
         """
         sample_range = random.sample(self.coco.cats.keys(), 2)
+        print('sample_range:', sample_range)
+        print('catId:', catId)
         if catId in sample_range:
             sample_range.remove(catId)
         sample_index = sample_range[0]
-        s_c = self.support_list[catId]
-        s_n = self.support_list[sample_index]
-        q_c = self.query_list[catId]
-        q_anns = self.query_anns_list[catId]
+        print('sample_index:', sample_index)
+        s_c = self.support_list[catId - 1]
+        s_n = self.support_list[sample_index - 1]
+        q_c = self.query_list[catId - 1]
+        q_anns = self.query_anns_list[catId - 1]
         return s_c, s_n, q_c, q_anns
 
     def n_way_k_shot(self, way):
@@ -102,7 +105,3 @@ class FsodDataset(Dataset):
             q_c_list.append(q_c)
             q_anns_list.append(q_anns)
         return s_c_list, q_c_list, q_anns_list
-
-
-if __name__ == '__main__':
-    pass
