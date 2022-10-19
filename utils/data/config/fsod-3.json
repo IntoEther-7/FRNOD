@@ -1,0 +1,1 @@
+{"root": "../../datasets/fsod", "train_json": "../../datasets/fsod/annotations/fsod_train.json", "test_json": "../../datasets/fsod/annotations/fsod_test.json", "mean": [0.462484545444252, 0.44607546410053095, 0.40609599802215024], "std": [0.23655825698124003, 0.2396927485981552, 0.24677449927853884]}
