@@ -2,6 +2,7 @@
 # PRODUCT: PyCharm
 # AUTHOR: 17795
 # TIME: 2022-10-16 16:34
+import copy
 import random
 import time
 
@@ -14,9 +15,12 @@ from utils.dataset_tools.support_query_constructor import one_way_k_shot
 # __C.PIXEL_MEANS = np.array([[[102.9801, 115.9465, 122.7717]]])
 
 class FsodDataset(Dataset):
-    def __init__(self, root, annFile, support_shot=2, query_shot=5, img_transform=None, target_transform=None,
+    def __init__(self, root, annFile, way=None, support_shot=2, query_shot=5, img_transform=None, target_transform=None,
                  seed=None, init=True):
         super(FsodDataset, self).__init__()
+        self.num_mission = None
+        self.mission = None
+        self.sample_list = None
         self.root = root
         self.coco = COCO(annFile)
         time.sleep(0.001)
@@ -40,6 +44,9 @@ class FsodDataset(Dataset):
                 self.support_list.append(support)
                 self.query_list.append(query)
                 self.query_anns_list.append(query_anns)
+
+            if way:
+                self.n_way_k_shot(way)
 
     def categories(self):
         return self.coco.cats
@@ -76,3 +83,26 @@ class FsodDataset(Dataset):
         q_c = self.query_list[catId]
         q_anns = self.query_anns_list[catId]
         return s_c, s_n, q_c, q_anns
+
+    def n_way_k_shot(self, way):
+        self.sample_list = copy.deepcopy(self.coco.cats.keys())
+        random.shuffle(self.sample_list)
+        self.num_mission = len(self.sample_list) // way
+        self.mission = []
+        [self.sample_list[i * way: (i + 1) * way] for i in range(self.num_mission)]
+
+    def get_n_way_k_shot(self, mission_id):
+        catIds = self.mission[mission_id]
+        s_c_list = []
+        q_c_list = []
+        q_anns_list = []
+        for catId in catIds:
+            s_c, s_n, q_c, q_anns = self.__getitem__(catId)
+            s_c_list.append(s_c)
+            q_c_list.append(q_c)
+            q_anns_list.append(q_anns)
+        return s_c_list, q_c_list, q_anns_list
+
+
+if __name__ == '__main__':
+    pass

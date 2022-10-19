@@ -29,14 +29,14 @@ def get_image_list(root, img_path_list: list, dataset: FsodDataset):
 def get_mean_and_std(img_path_list: list):
     tqdm.write('计算图像像素均值')
     time.sleep(0.001)
-    pixel_num_list = []
+    pixel_num = 0
     pixel_sum = np.zeros((3,))
-    r_list, g_list, b_list = [], [], []
     for img_path in tqdm(img_path_list):
-        img_np = np.array(Image.open(img_path).convert('RGB'))  # 高, 宽, 通道 (719, 1024, 3)
+        img_np = np.array(Image.open(img_path).convert('RGB')) / 255.  # 高, 宽, 通道 (719, 1024, 3)
+        # 各通道加和整幅图的像素
         pixel_sum += np.sum(img_np, axis=(0, 1))
-        pixel_num_img = img_np.shape[0] * img_np.shape[1]
-        pixel_num_list.append(pixel_num_img)
+        # 这个图片的像素个数
+        pixel_num += img_np.shape[0] * img_np.shape[1]
         # if len(img_np.shape) == 3:
         #     if img_np.shape[2] == 3:
         #         r, g, b = np.split(img_np, 3, axis=2)
@@ -59,16 +59,17 @@ def get_mean_and_std(img_path_list: list):
         #         pixel_num_img = img_np.shape[0] * img_np.shape[1]
         #         pixel_num_list.append(pixel_num_img)
 
-    pixel_num = np.sum(np.array(pixel_num_list))
-
     mean = pixel_sum / pixel_num
     tqdm.write('计算图像像素标准差')
     time.sleep(0.001)
 
+    # 各通道与均值差, 再平方累积和
     pixel_pow2 = np.zeros((3,))
     for img_path in tqdm(img_path_list):
-        img_np = np.array(Image.open(img_path).convert('RGB'))  # 高, 宽, 通道 (719, 1024, 3)
+        img_np = np.array(Image.open(img_path).convert('RGB')) / 255.  # 高, 宽, 通道 (719, 1024, 3)
+        # 均值差, 平方, 再加和
         pixel_pow2 += np.sum(np.power((img_np - mean), 2), axis=(0, 1))
+    # 除以像素个数, 再开方
     std = np.sqrt(pixel_pow2 / pixel_num)
     # r_pow2, g_pow2, b_pow2 = 0, 0, 0
     # for img_path in tqdm(img_path_list):
@@ -101,7 +102,6 @@ if __name__ == '__main__':
     test_json = '../../datasets/fsod/annotations/fsod_test.json'
     fsod_train = FsodDataset(root, train_json, support_shot=2, query_shot=1, init=False)
     fsod_test = FsodDataset(root, test_json, support_shot=2, query_shot=1, init=False)
-    img_path_list = []
 
     # __C.PIXEL_MEANS = np.array([[[102.9801, 115.9465, 122.7717]]])
     # COCO数据集的均值和方差为：
@@ -111,6 +111,7 @@ if __name__ == '__main__':
     #     mean_vals = [0.485, 0.456, 0.406]
     #     std_vals = [0.229, 0.224, 0.225]
     for i in range(1000):
+        img_path_list = []
         img_path_list = get_image_list(root, img_path_list, fsod_train)
         img_path_list = get_image_list(root, img_path_list, fsod_test)
         tqdm.write('----------{}----------'.format(i))

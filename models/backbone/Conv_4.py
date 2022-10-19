@@ -30,6 +30,8 @@ class BackBone(nn.Module):
         @param num_channel: 通道数
         """
         super().__init__()
+        self.name = 'conv_4'
+        self.num_channel = num_channel
 
         self.layers = nn.Sequential(
             ConvBlock(3, num_channel),

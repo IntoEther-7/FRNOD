@@ -21,21 +21,17 @@ from models.roi_align import FeatureAlign
 from models.FRNOD import FRNOD
 from models.SupportBranch import SupportBranch
 from models.BoxRegression import BoxRegression
+from pycocotools.cocoeval import COCOeval
 
 if __name__ == '__main__':
-    # root = 'datasets/fsod'
-    # train_json = 'datasets/fsod/annotations/fsod_train.json'
-    # test_json = 'datasets/fsod/annotations/fsod_test.json'
-    # fsod = FsodDataset(root, test_json, support_shot=2, query_shot=2)
-    # s_c, s_n, q_c_list, q_anns = fsod.triTuple(catId=1)
-    # s_c, s_n, q_c_list, q_anns = pre_process(s_c, q_c_list, q_anns, s_n)
-    # torch.save([s_c, s_n, q_c_list, q_anns], 'tmp.pth')
-    s_c, s_n, q_c_list, q_anns = torch.load('tmp.pth')
-    # print(s_c, s_n, q_c_list, q_anns)
+    root = 'datasets/fsod'
+    train_json = 'datasets/fsod/annotations/fsod_train.json'
+    test_json = 'datasets/fsod/annotations/fsod_test.json'
+    fsod = FsodDataset(root, test_json, support_shot=2, query_shot=2)
 
     way = 2
     support_shot = 2
-    query_shot = 2
+    query_shot = 5
     # 超参
     fg_iou_thresh = 0.7
     bg_iou_thresh = 0.3
@@ -87,4 +83,23 @@ if __name__ == '__main__':
                   box_regression=box_regression,
                   post_nms_top_n=post_nms_top_n)
 
-    losses = frnod.forward_train_trituple(s_c, s_n, q_c_list, targets=q_anns, scale=1.)
+    # 优化器
+    optimizer = torch.optim.SGD(frnod.parameters(), lr=0.01)
+
+    # 精度
+    # COCOeval()
+
+    # 训练
+    loss_list
+    for i in range(1, 801):
+        print('--------------------epoch:   {}--------------------'.format(i))
+        s_c, s_n, q_c_list, q_anns = fsod.triTuple(catId=i)
+        s_c, s_n, q_c_list, q_anns = pre_process(s_c, q_c_list, q_anns, s_n)
+        losses = frnod.forward_train_trituple(s_c, s_n, q_c_list, targets=q_anns, scale=1.)
+        loss = 10 * losses['loss_frn'] + 10 * losses['loss_objectness'] + losses['loss_rpn_box_reg']
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        print('loss:    ', loss)
+        if i % 10 == 0:
+            torch.save({'model': frnod.state_dict()}, 'weights/frnod{}.pth'.format(i))

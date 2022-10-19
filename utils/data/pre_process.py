@@ -62,6 +62,7 @@ def transform_anns(query_anns):
         img_bboxes = []
         img_labels = []
         for i in query_ann:
+            # print(i)
             i = i[0]
             # print(i)
             img_bboxes.append([i['bbox'][0], i['bbox'][1], i['bbox'][0] + i['bbox'][2], i['bbox'][1] + i['bbox'][3]])
@@ -70,11 +71,11 @@ def transform_anns(query_anns):
         anns.append(ann_img)
     return anns
 
-# if __name__ == '__main__':
-#     from utils.data.dataset import FsodDataset
-#
-#     fsod = FsodDataset(root='../../datasets/fsod/', annFile='../../datasets/fsod/annotations/fsod_test.json',
-#                        support_shot=5,
-#                        query_shot=5, seed=114514)
-#     support, query, query_anns = fsod[10]
-#     anns = transform_anns(query_anns)
+if __name__ == '__main__':
+    from utils.data.dataset import FsodDataset
+
+    fsod = FsodDataset(root='../../datasets/fsod/', annFile='../../datasets/fsod/annotations/fsod_test.json',
+                       support_shot=5,
+                       query_shot=5, seed=114514)
+    support, query, query_anns = fsod[10]
+    anns = transform_anns(query_anns)

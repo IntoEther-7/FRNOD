@@ -10,7 +10,7 @@ import warnings
 from typing import Tuple, List, Dict, Optional, Union
 
 
-class GeneralizedRCNN(nn.Module):
+class QueryBranch(nn.Module):
     """
     Main class for Generalized R-CNN.
 
@@ -23,12 +23,11 @@ class GeneralizedRCNN(nn.Module):
             the model
     """
 
-    def __init__(self, backbone, rpn, roi_heads, transform):
-        super(GeneralizedRCNN, self).__init__()
+    def __init__(self, backbone, rpn, transform):
+        super(QueryBranch, self).__init__()
         self.transform = transform
         self.backbone = backbone
         self.rpn = rpn
-        self.roi_heads = roi_heads
         # used only on torchscript mode
         self._has_warned = False
 
@@ -40,8 +39,15 @@ class GeneralizedRCNN(nn.Module):
 
         return detections
 
-    def forward(self, images, targets=None):
-        # type: (List[Tensor], Optional[List[Dict[str, Tensor]]]) -> Tuple[Dict[str, Tensor], List[Dict[str, Tensor]]]
+
+
+    def forward(self, query_images, targets=None):
+        r"""
+        输入query_images
+        :param query_images: List[Tensor], images to be processed
+        :param targets: List(图像)[List(图像中的多个标注)[Dict[str, Tensor]]]
+        :returns: proposals, proposal_losses, features, query_images, targets
+        """
         """
         Args:
             images (list[Tensor]): images to be processed
@@ -70,13 +76,13 @@ class GeneralizedRCNN(nn.Module):
                                      "Tensor, got {:}.".format(type(boxes)))
 
         original_image_sizes: List[Tuple[int, int]] = []
-        for img in images:
+        for img in query_images:
             val = img.shape[-2:]
             assert len(val) == 2
             original_image_sizes.append((val[0], val[1]))
 
         if self.transform:
-            images, targets = self.transform(images, targets)
+            query_images, targets = self.transform(query_images, targets)
 
         # Check for degenerate boxes
         if targets is not None:
@@ -91,24 +97,28 @@ class GeneralizedRCNN(nn.Module):
                                      " Found invalid box {} for target at index {}."
                                      .format(degen_bb, target_idx))
 
-        features = self.backbone(images.tensors)
+        features = self.backbone(query_images.tensors)
         if isinstance(features, torch.Tensor):
             features = OrderedDict([('0', features)])
-        proposals, proposal_losses = self.rpn(images, features, targets)
-        print('proposals:       ', proposals)
-        print('proposal_losses: ', proposal_losses)
-        return proposals, proposal_losses
-        detections, detector_losses = self.roi_heads(features, proposals, images.image_sizes, targets)
-        detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)
-
-        losses = {}
-        losses.update(detector_losses)
-        losses.update(proposal_losses)
-
-        if torch.jit.is_scripting():
-            if not self._has_warned:
-                warnings.warn("RCNN always returns a (Losses, Detections) tuple in scripting")
-                self._has_warned = True
-            return losses, detections
-        else:
-            return self.eager_outputs(losses, detections)
+        proposals, proposal_losses = self.rpn(query_images, features, targets)
+        # print('proposals:       ', [i.shape for i in proposals])
+        # print('proposal_losses: ', proposal_losses)
+        # print('features:                ', features.__class__, features.keys(), [i.shape for i in features['0']])
+        # print('query_images.image_sizes:', query_images.image_sizes)
+        # print('targets:                 ', targets)
+        return proposals, proposal_losses, features, query_images, targets
+        # box_features = self.get_roi_align(features, proposals, query_images.image_sizes, targets)
+        # detections, detector_losses = self.roi_heads(features, proposals, query_images.image_sizes, targets)
+        # detections = self.transform.postprocess(detections, query_images.image_sizes, original_image_sizes)
+        #
+        # losses = {}
+        # losses.update(detector_losses)
+        # losses.update(proposal_losses)
+        #
+        # if torch.jit.is_scripting():
+        #     if not self._has_warned:
+        #         warnings.warn("RCNN always returns a (Losses, Detections) tuple in scripting")
+        #         self._has_warned = True
+        #     return losses, detections
+        # else:
+        #     return self.eager_outputs(losses, detections)
