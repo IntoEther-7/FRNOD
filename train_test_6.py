@@ -26,7 +26,7 @@ from pycocotools.cocoeval import COCOeval
 
 if __name__ == '__main__':
 
-    is_cuda = False
+    is_cuda = True
     way = 2
     support_shot = 2
     query_shot = 5
@@ -74,6 +74,7 @@ if __name__ == '__main__':
                                  batch_size_per_image=batch_size_per_image,
                                  positive_fraction=positive_fraction,
                                  bbox_reg_weights=None)
+    feature_align = RoIHeads()
     # 框回归
     box_regression = BoxRegression(in_channels=channels * resolution, representation_size=1024)
     # 网络

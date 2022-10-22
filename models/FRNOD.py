@@ -20,7 +20,8 @@ from models.BoxRegression import BoxRegression
 class FRNOD(nn.Module):
 
     def __init__(self, way: int, shot: int, query_shot: int, backbone: nn.Module, support_branch: SupportBranch,
-                 query_branch: QueryBranch, roi_align: FeatureAlign, box_regression: BoxRegression, post_nms_top_n):
+                 query_branch: QueryBranch, roi_align: FeatureAlign, box_regression: BoxRegression, post_nms_top_n,
+                 is_cuda):
         r"""
         初始化FRNOD网络
         :param way: way
@@ -40,7 +41,8 @@ class FRNOD(nn.Module):
         self.box_regression = box_regression
         self.post_nms_top_n = post_nms_top_n
         self.scale = nn.Parameter(torch.FloatTensor([1.0]), requires_grad=True)
-        self.criterion = nn.NLLLoss()
+        self.is_cuda = is_cuda
+        # self.criterion = nn.NLLLoss()
         # self.loss_frn_weight = nn.Parameter(torch.FloatTensor[1.0], requires_grad=True)
         # self.loss_objectness_weight = nn.Parameter(torch.FloatTensor[1.0], requires_grad=True)
         # self.loss_rpn_box_reg_weight = nn.Parameter(torch.FloatTensor[1.0], requires_grad=True)
@@ -144,17 +146,17 @@ class FRNOD(nn.Module):
         :param Q_bar: 预算查询图特征
         :return: 返回欧几里得距离
         """
-        # query:                                [way*query_shot*resolution, d]
-        # query.unsqueeze(0):                   [1, way*query_shot*resolution, d]
-        # Q_bar:                                [way, way*query_shot*resolution, d]
-        # Q_bar - query.unsqueeze(0):           [way, way*query_shot*resolution, d]
-        # 这里是利用广播机制, 将query转换成了[way, way*query_shot*resolution, d], 进行相减
-        # pow(2)各位单独幂运算                     [way, way*query_shot*resolution, d]
-        # sum(2)指定维度相加, 使矩阵第三维度相加, 导致其形状从[way, way*query_shot*resolution, d]变成了
-        #                                       [way, way*query_shot*resolution]
+        # query:                                [roi数 * resolution, d]
+        # query.unsqueeze(0):                   [1, roi数 * resolution, d]
+        # Q_bar:                                [way * shot, roi数 * resolution, d]
+        # Q_bar - query.unsqueeze(0):           [way * shot, roi数 * resolution, d]
+        # 这里是利用广播机制, 将query转换成了[way * shot, roi数 * resolution, d], 进行相减
+        # pow(2)各位单独幂运算                     [way * shot, roi数 * resolution, d]
+        # sum(2)指定维度相加, 使矩阵第三维度相加, 导致其形状从[way * shot, roi数 * resolution, d]变成了
+        #                                       [way * shot, roi数 * resolution]
         # x.permute(1,0)将x的第0个维度和第一个维度互换了
-        #                                       [way*query_shot*resolution, way]
-        euclidean_matrix = (Q_bar - query.unsqueeze(0)).pow(2).sum(2).permute(1, 0)  # (way*query_shot*resolution, way)
+        #                                       [roi数 * resolution, way * shot]
+        euclidean_matrix = (Q_bar - query.unsqueeze(0)).pow(2).sum(2).permute(1, 0)  # [roi数 * resolution, way * shot]
         return euclidean_matrix
 
     def metric(self, euclidean_matrix, box_per_image, resolution):
@@ -166,11 +168,15 @@ class FRNOD(nn.Module):
         :param resolution: 分辨率
         :return: 返回距离计算
         """
-        # euclidean_matrix: (query_shot*resolution, way)
-        # .neg():           (query_shot*resolution, way)
-        # .view():          (query_shot, resolution, way)
+        # euclidean_matrix: [roi数 * resolution, way]
+        # .neg():           [roi数 * resolution, way]
+        # .view():          [roi数, resolution, way]
         # .mean(1):         (query_shot, way)
-        metric_matrix = euclidean_matrix.neg().contiguous().view(-1, resolution, 2).mean(1)  # (, query_shot, 类别数)
+        metric_matrix = euclidean_matrix. \
+            neg(). \
+            contiguous(). \
+            view(box_per_image, resolution, self.way) \
+            .mean(1)  # (roi数, way)
 
         return metric_matrix
 
@@ -207,24 +213,35 @@ class FRNOD(nn.Module):
                                    targets=targets)
         # resize之前, 有多少个roi
         n = boxes_features.shape[0]
-        # resize特征
-        boxes_features = boxes_features.view(-1, self.channels)
 
-        s_c = s_c.view(-1, self.shot * self.resolution, self.channels)
-        s_n = s_n.view(-1, self.shot * self.resolution, self.channels)
+        # resize特征
+        # (roi数, channel, s, s) -> (roi数, s, s, channel) -> (roi数 * 分辨率, channel)
+        boxes_features = boxes_features. \
+            permute(0, 2, 3, 1). \
+            contiguous(). \
+            view(n * self.resolution, self.channels)  # (shot * resolution, channel)
+        s_c = s_c.view(self.shot, self.channels, self.resolution).permute(0, 2, 1)  # shot, resolution, channel
+        s_n = s_n.view(self.shot, self.channels, self.resolution).permute(0, 2, 1)  # shot, resolution, channel
+        s_c = s_c.mean(0).unsqueeze(0)
+        s_n = s_n.mean(0).unsqueeze(0)
 
         # 分类
-        s = torch.cat([s_c, s_n])
+        s = torch.cat([s_c, s_n])  # (way, resolution, channel)
 
         Q_bar = self.reconstruct_feature_map(s, boxes_features, True)
-        euclidean_matrix = self.euclidean_metric(boxes_features, Q_bar)
-        metric_matrix = self.metric(euclidean_matrix, box_per_image=self.box_per_image, resolution=self.resolution)
+        euclidean_matrix = self.euclidean_metric(boxes_features, Q_bar)  # [roi数 * resolution, way]
+        metric_matrix = self.metric(euclidean_matrix,
+                                    box_per_image=n,
+                                    resolution=self.resolution)  # (roi数, way)
 
-        logits = metric_matrix * self.scale
-        log_prediction = F.log_softmax(logits, dim=1)
+        logits = metric_matrix * self.scale  # (roi数, way)
+        log_prediction = F.log_softmax(logits, dim=1, dtype=torch.float)  # (roi数, way)
 
-        gt_prediction = torch.tensor([0 for i in range(n * 2)])
-        loss_frn = self.criterion(log_prediction, gt_prediction)
+        gt_prediction = torch.zeros(n, dtype=torch.long)  # (n)
+        if self.is_cuda:
+            gt_prediction = gt_prediction.cuda()
+        criterion = nn.NLLLoss()
+        loss_frn = criterion(log_prediction, gt_prediction)
         proposal_losses['loss_frn'] = loss_frn
         losses = proposal_losses
 

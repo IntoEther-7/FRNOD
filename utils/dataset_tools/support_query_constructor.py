@@ -38,26 +38,30 @@ def one_way_k_shot(root, dataset: coco.COCO, catId: int, support_shot: int = 2,
                                           support_shot=support_shot,
                                           query_shot=query_shot)
 
-    support = []
+    support_and_ann = []
     for support_annId in support_annIds:
+
         ann = dataset.anns[support_annId]
-        bbox = ann['bbox']
+        # bbox = ann['bbox']
         imgId = ann['image_id']
         imgInfo = dataset.loadImgs(ids=[imgId])[0]
         imgPath = os.path.join(root, 'images', imgInfo['file_name'])
-        img = crop_support(imgPath, bbox)
-        support.append(img)
+        # img = crop_support(imgPath, bbox)
+        # boxes.append(ann['bbox'])
+        # support.append(imgPath)
+        support_and_ann.append([imgPath, ann['bbox']])
+
 
     query = []
     query_anns = []  # type:list
     for imgInfo in dataset.loadImgs(ids=query_imgIds):
         imgPath = os.path.join(root, 'images', imgInfo['file_name'])
-        img = PIL.Image.open(imgPath).convert('RGB')
-        query.append(img)
+        # img = PIL.Image.open(imgPath).convert('RGB')
+        query.append(imgPath)
         annIds = dataset.getAnnIds(imgIds=[imgInfo['id']], catIds=catId)
         query_anns.append([dataset.loadAnns(annId) for annId in annIds])
 
-    return support, query, query_anns
+    return support_and_ann, query, query_anns
 
 
 def k_shot(dataset: coco.COCO, catId: int, support_shot: int = 2, query_shot: int = 5):
@@ -83,29 +87,6 @@ def k_shot(dataset: coco.COCO, catId: int, support_shot: int = 2, query_shot: in
     query_annIDs = dataset.getAnnIds(imgIds=query_imgIds, catIds=[catId])
 
     return support_annIds, query_imgIds
-
-
-def crop_support(imgPath, bbox, is_show=False):
-    r"""
-    根据bbox, 裁剪实例
-    :param imgPath: 图像路径
-    :param bbox: bbox
-    :param is_show: 是否显示裁剪结果
-    :return: 裁剪的图像 img_crop (PIL.Image)
-    """
-    x1, y1, w, h = bbox
-    img = PIL.Image.open(imgPath).convert('RGB')
-    # toTensor = transforms.ToTensor()
-    # imgTensor = toTensor(img)  # (channel, hight, width)
-    # print(imgTensor.shape)
-    # new_tensor = img[:, y1:y1 + h, x1:x1 + w]
-    # toPILImage = transforms.ToPILImage()
-    img_crop = img.crop([x1, y1, x1 + w, y1 + h])
-    if is_show:
-        img.show()
-        img_crop.show()
-    return img_crop  # type: PIL.Image
-
 
 # if __name__ == '__main__':
 #     root = '../../datasets/fsod/'
