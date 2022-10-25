@@ -22,7 +22,7 @@ if __name__ == '__main__':
     root = 'datasets/fsod'
     train_json = 'datasets/fsod/annotations/fsod_train.json'
     test_json = 'datasets/fsod/annotations/fsod_test.json'
-    fsod = FsodDataset(root, test_json, support_shot=2, query_shot=2)
+    fsod = FsodDataset(root, test_json, support_shot=2, val_shot=2)
     s_c, s_n, q_c_list, q_anns = fsod.triTuple(catId=1)
     s_c, s_n, q_c_list, q_anns = pre_process(s_c, q_c_list, q_anns, s_n)
 
@@ -61,12 +61,7 @@ if __name__ == '__main__':
                                  positive_fraction=positive_fraction,
                                  bbox_reg_weights=None)
     # 网络
-    frnod = FRNOD(way=2,
-                  shot=1,
-                  query_shot=5,
-                  backbone=backbone,
-                  support_branch=support_branch,
-                  query_branch=query_branch,
-                  roi_align=feature_align)
+    frnod = FRNOD(way=2, shot=1, query_shot=5, backbone=backbone, support_branch=support_branch,
+                  query_branch=query_branch, roi_head=feature_align, box_regression=, post_nms_top_n=, is_cuda=)
 
     frnod.forward_train_trituple(s_c, s_n, q_c_list, targets=q_anns, scale=1.)

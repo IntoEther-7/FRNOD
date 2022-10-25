@@ -21,7 +21,7 @@ from models.QueryBranch import QueryBranch
 from models.roi_align import FeatureAlign
 from models.FRNOD import FRNOD
 from models.SupportBranch import SupportBranch
-from models.BoxRegression import BoxRegression
+from models.BoxRegression_dateout import BoxRegression
 from pycocotools.cocoeval import COCOeval
 
 if __name__ == '__main__':
@@ -45,7 +45,7 @@ if __name__ == '__main__':
     root = 'datasets/fsod'
     train_json = 'datasets/fsod/annotations/fsod_train.json'
     test_json = 'datasets/fsod/annotations/fsod_test.json'
-    fsod = FsodDataset(root, train_json, support_shot=support_shot, query_shot=query_shot)
+    fsod = FsodDataset(root, train_json, support_shot=support_shot, val_shot=query_shot)
     # 骨干网络
     backbone = BackBone(channels)
     # 支持分支
@@ -78,16 +78,9 @@ if __name__ == '__main__':
     # 框回归
     box_regression = BoxRegression(in_channels=channels * resolution, representation_size=1024)
     # 网络
-    frnod = FRNOD(way=way,
-                  shot=support_shot,
-                  query_shot=query_shot,
-                  backbone=backbone,
-                  support_branch=support_branch,
-                  query_branch=query_branch,
-                  roi_align=feature_align,
-                  box_regression=box_regression,
-                  post_nms_top_n=post_nms_top_n,
-                  is_cuda=is_cuda)
+    frnod = FRNOD(way=way, shot=support_shot, query_shot=query_shot, backbone=backbone, support_branch=support_branch,
+                  query_branch=query_branch, roi_head=feature_align, box_regression=box_regression,
+                  post_nms_top_n=post_nms_top_n, is_cuda=is_cuda)
 
     # 优化器
     optimizer = torch.optim.SGD(frnod.parameters(), lr=0.01)
@@ -121,6 +114,6 @@ if __name__ == '__main__':
         print('loss:    ', loss)
         loss_list.append(loss)
         if i % 10 == 0:
-            torch.save({'model': frnod.state_dict()}, 'weights/frnod{}.pth'.format(i))
+            torch.save({'models': frnod.state_dict()}, 'weights/frnod{}.pth'.format(i))
 
     torch.save(loss_list, 'weights/loss_list.json')

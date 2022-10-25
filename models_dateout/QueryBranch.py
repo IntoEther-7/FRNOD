@@ -20,7 +20,7 @@ class QueryBranch(nn.Module):
         roi_heads (nn.Module): takes the features + the proposals from the RPN and computes
             detections / masks from it.
         transform (nn.Module): performs the data transformation from the inputs to feed into
-            the model
+            the models
     """
 
     def __init__(self, backbone, rpn, transform):
@@ -54,10 +54,10 @@ class QueryBranch(nn.Module):
             targets (list[Dict[Tensor]]): ground-truth boxes present in the image (optional)
 
         Returns:
-            result (list[BoxList] or dict[Tensor]): the output from the model.
+            result (list[BoxList] or dict[Tensor]): the output from the models.
                 During training, it returns a dict[Tensor] which contains the losses.
                 During testing, it returns list[BoxList] contains additional fields
-                like `scores`, `labels` and `mask` (for Mask R-CNN models).
+                like `scores`, `labels` and `mask` (for Mask R-CNN models_dateout).
 
         """
         if self.training and targets is None:

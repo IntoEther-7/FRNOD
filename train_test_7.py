@@ -9,12 +9,14 @@ from torchvision.models.detection import transform
 from torchvision.ops import MultiScaleRoIAlign
 from torchvision.transforms import transforms
 
+from models.box_predictor import FRPredictor
+from models.roi_head import FRHead
 from utils.data.dataset import FsodDataset
 from utils.data.pre_process import pre_process
 from models.backbone.ResNet import resnet12
 from models.backbone.Conv_4 import BackBone
 from torchvision.models.detection.rpn import RegionProposalNetwork, AnchorGenerator, RPNHead
-from torchvision.models.detection.roi_heads import RoIHeads
+
 from torchvision.models.detection.faster_rcnn import TwoMLPHead
 from torchvision.models.detection.generalized_rcnn import GeneralizedRCNN
 from models.QueryBranch import QueryBranch
@@ -35,12 +37,15 @@ if __name__ == '__main__':
     bg_iou_thresh = 0.3
     batch_size_per_image = 100
     positive_fraction = 0.5
-    channels = 256
+    channels = 320
     pre_nms_top_n = {'training': 300, 'testing': 150}
     post_nms_top_n = {'training': 100, 'testing': 50}
-    roi_size = (5, 5)
+    roi_size = (7, 7)
     support_size = (roi_size[0] * 16, roi_size[1] * 16)
     resolution = roi_size[0] * roi_size[1]
+    nms_thresh = 0.5
+    detections_per_img = 30
+    scale = 1.
 
     root = 'datasets/fsod'
     train_json = 'datasets/fsod/annotations/fsod_train.json'
@@ -64,22 +69,33 @@ if __name__ == '__main__':
                                 positive_fraction=positive_fraction,
                                 pre_nms_top_n=pre_nms_top_n,
                                 post_nms_top_n=post_nms_top_n,
-                                nms_thresh=0.85)
+                                nms_thresh=nms_thresh)
     query_branch = QueryBranch(backbone, rpn=rpn, transform=t)
-    # 特征对齐
-    feature_align = FeatureAlign(output_size=roi_size,
-                                 sampling_ratio=2,
-                                 fg_iou_thresh=fg_iou_thresh,
-                                 bg_iou_thresh=bg_iou_thresh,
-                                 batch_size_per_image=batch_size_per_image,
-                                 positive_fraction=positive_fraction,
-                                 bbox_reg_weights=None)
+    # roi_head
+    # feature_align = FeatureAlign(output_size=roi_size,
+    #                              sampling_ratio=2,
+    #                              fg_iou_thresh=fg_iou_thresh,
+    #                              bg_iou_thresh=bg_iou_thresh,
+    #                              batch_size_per_image=batch_size_per_image,
+    #                              positive_fraction=positive_fraction,
+    #                              bbox_reg_weights=None)
+    fr_predictor = FRPredictor(in_channels=channels,
+                               way=way,
+                               channels=channels,
+                               resolution=resolution,
+                               representation_size=1024,
+                               scale=scale)
+    fr_head = FRHead(output_size=roi_size, sampling_ratio=2, bbox_predictor=fr_predictor, fg_iou_thresh=fg_iou_thresh,
+                     bg_iou_thresh=bg_iou_thresh, batch_size_per_image=batch_size_per_image, bbox_reg_weights=None,
+                     positive_fraction=positive_fraction, score_thresh=0.5, nms_thresh=nms_thresh,
+                     detections_per_img=detections_per_img)
     # 框回归
     box_regression = BoxRegression(in_channels=channels * resolution, representation_size=1024)
     # 网络
     frnod = FRNOD(way=way, shot=support_shot, query_shot=query_shot, backbone=backbone, support_branch=support_branch,
-                  query_branch=query_branch, roi_head=feature_align, box_regression=box_regression,
-                  post_nms_top_n=post_nms_top_n, is_cuda=is_cuda)
+                  query_branch=query_branch, roi_head=fr_head, box_regression=box_regression,
+                  post_nms_top_n=post_nms_top_n,
+                  is_cuda=is_cuda)
 
     # 优化器
     optimizer = torch.optim.SGD(frnod.parameters(), lr=0.01)
@@ -105,8 +121,11 @@ if __name__ == '__main__':
                           query_transforms=transforms.Compose([transforms.ToTensor(),
                                                                transforms.Resize(600)]),
                           is_cuda=is_cuda)
-        losses = frnod.forward_train_trituple(s_c, s_n, q_c_list, targets=q_anns, scale=1.)
-        loss = losses['loss_frn'] + losses['loss_objectness'] + losses['loss_rpn_box_reg']
+        result, losses = frnod.forward_train_trituple(s_c, s_n, q_c_list, targets=q_anns, scale=scale)
+        print(result)
+        print(losses)
+        # loss = losses['loss_frn'] + losses['loss_objectness'] + losses['loss_rpn_box_reg']
+        loss = losses['loss_classifier'] + losses['loss_box_reg']
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

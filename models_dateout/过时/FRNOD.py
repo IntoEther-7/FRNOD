@@ -89,7 +89,7 @@ class FRNOD(nn.Module):
         """
         # 这是batch大小, 共有多少张图
         batch_size = input.size(0)
-        feature_map = self.backbone.forward(input)
+        feature_map = self.backbone.forward(input, )
 
         if self.backbone_name == 'resnet12':
             feature_map = feature_map / np.sqrt(640)
@@ -222,7 +222,7 @@ class FRNOD(nn.Module):
         # * roi_indices：rpn筛选出的roi对应的图片索引，大小[final_rpn_num]
         # * anchor：原图像的锚点，大小[all_anchor_num, 4]
         print(query_feature.shape)
-        rpn_locs, rpn_scores, rois, roi_indices, anchor = self.rpn.forward(query_feature, img_size, 1.)
+        rpn_locs, rpn_scores, rois, roi_indices, anchor = self.rpn.forward(query_feature, img_size)
 
         rpn_loc_loss_all, rpn_cls_loss_all, roi_loc_loss_all, roi_cls_loss_all = 0, 0, 0, 0
         sample_rois, sample_indexes, gt_roi_locs, gt_roi_labels = [], [], [], []
@@ -273,8 +273,7 @@ class FRNOD(nn.Module):
         # 重新定位
         # head
         # roi_cls_locs, roi_scores = self.model_train([base_feature, sample_rois, sample_indexes, img_size], mode='head')
-        roi_cls_locs, roi_scores = self.head.forward(support=support_c, query=query_feature, query_rois=rois,
-                                                     roi_indices=roi_indices, img_size=img_size)
+        roi_cls_locs, roi_scores = self.head.forward(support_list=support_c, query_images=)
 
         for i in range(n):
             # ------------------------------------------------------ #

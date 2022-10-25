@@ -15,7 +15,8 @@ from utils.dataset_tools.support_query_constructor import one_way_k_shot
 # __C.PIXEL_MEANS = np.array([[[102.9801, 115.9465, 122.7717]]])
 
 class FsodDataset(Dataset):
-    def __init__(self, root, annFile, way=None, support_shot=2, query_shot=5, img_transform=None, target_transform=None,
+    def __init__(self, root, annFile, way=None, support_shot=2, val_shot=None, img_transform=None,
+                 target_transform=None,
                  seed=None, init=True):
         super(FsodDataset, self).__init__()
         self.num_mission = None
@@ -27,7 +28,7 @@ class FsodDataset(Dataset):
         self.img_transform = img_transform
         self.target_transform = target_transform
         self.support_shot = support_shot
-        self.query_shot = query_shot
+        self.val_shot = val_shot
         if seed:
             random.seed(seed)
 
@@ -35,15 +36,19 @@ class FsodDataset(Dataset):
         self.support_list = []
         self.query_list = []
         self.query_anns_list = []
+        self.val_list = []
+        self.val_anns_list = []
         if init:
             print('正在为每个类别生成support和query')
             for catId, cat in tqdm(self.coco.cats.items()):
-                support, query, query_anns = one_way_k_shot(root=self.root, dataset=self.coco, catId=catId,
-                                                            support_shot=self.support_shot,
-                                                            query_shot=self.query_shot)
+                support, query, query_anns, val, val_anns = one_way_k_shot(root=self.root, dataset=self.coco,
+                                                                           catId=catId,
+                                                                           support_shot=self.support_shot)
                 self.support_list.append(support)
                 self.query_list.append(query)
                 self.query_anns_list.append(query_anns)
+                self.val_list.append(val)
+                self.val_anns_list.append(val_anns)
 
             if way:
                 self.n_way_k_shot(way)
@@ -68,7 +73,7 @@ class FsodDataset(Dataset):
         qurey_anns = self.query_anns_list[catId]
         return support, qurey, qurey_anns
 
-    def triTuple(self, catId) -> (list, list, list, list):
+    def triTuple(self, catId) -> (list, list, list, list, list, list):
         r"""
         生成三元组, (q_c, s_c, s_n), 其中sc和qc同类, 其类index为catId, sn为其他类, 随机抽取
         :param catId: c类
@@ -85,14 +90,16 @@ class FsodDataset(Dataset):
         s_n = self.support_list[sample_index - 1]
         q_c = self.query_list[catId - 1]
         q_anns = self.query_anns_list[catId - 1]
-        return s_c, s_n, q_c, q_anns
+        val = self.val_list[catId - 1]
+        val_anns = self.val_anns_list[catId - 1]
+        return s_c, s_n, q_c, q_anns, val, val_anns
 
     def n_way_k_shot(self, way):
         self.sample_list = copy.deepcopy(self.coco.cats.keys())
         random.shuffle(self.sample_list)
         self.num_mission = len(self.sample_list) // way
         self.mission = []
-        [self.sample_list[i * way: (i + 1) * way] for i in range(self.num_mission)]
+        return [self.sample_list[i * way: (i + 1) * way] for i in range(self.num_mission)]
 
     def get_n_way_k_shot(self, mission_id):
         catIds = self.mission[mission_id]

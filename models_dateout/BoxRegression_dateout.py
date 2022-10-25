@@ -16,8 +16,8 @@ class BoxRegression(nn.Module):
         :param representation_size:
         """
         super(BoxRegression, self).__init__()
-        self.fc6 = nn.Linear(in_channels, representation_size)  # representation_size 1024
-        self.fc7 = nn.Linear(representation_size, representation_size)
+        self.fc6 =      nn.Linear(in_channels, representation_size)  # representation_size 1024
+        self.fc7 =      nn.Linear(representation_size, representation_size)
         self.bbox_pred = nn.Linear(representation_size, 4)
 
     def forward(self, x: torch.Tensor):

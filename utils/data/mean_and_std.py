@@ -100,8 +100,8 @@ if __name__ == '__main__':
     root = '../../datasets/fsod'
     train_json = '../../datasets/fsod/annotations/fsod_train.json'
     test_json = '../../datasets/fsod/annotations/fsod_test.json'
-    fsod_train = FsodDataset(root, train_json, support_shot=2, query_shot=1, init=False)
-    fsod_test = FsodDataset(root, test_json, support_shot=2, query_shot=1, init=False)
+    fsod_train = FsodDataset(root, train_json, support_shot=2, val_shot=1, init=False)
+    fsod_test = FsodDataset(root, test_json, support_shot=2, val_shot=1, init=False)
 
     # __C.PIXEL_MEANS = np.array([[[102.9801, 115.9465, 122.7717]]])
     # COCO数据集的均值和方差为：

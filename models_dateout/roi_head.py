@@ -21,6 +21,7 @@ from models import _utils as det_utils
 from typing import Optional, List, Dict, Tuple
 from typing import *
 from . import _utils as det_utils
+from .box_predictor import FRPredictor
 
 
 def _onnx_merge_levels(levels: Tensor, unmerged_results: List[Tensor]) -> Tensor:
@@ -56,6 +57,8 @@ def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
     """
 
     labels = torch.cat(labels, dim=0)
+    labels = torch.where(labels > 0.5, torch.ones_like(labels), torch.zeros_like(labels))
+    # labels.where()
     regression_targets = torch.cat(regression_targets, dim=0)
 
     classification_loss = F.cross_entropy(class_logits, labels)
@@ -79,13 +82,13 @@ def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
     return classification_loss, box_loss
 
 
-class RoIHead(nn.Module):
+class FRHead(nn.Module):
     def __init__(self,
                  # RoI Align
                  output_size,
                  sampling_ratio,
                  # get class_logits, box_regression
-                 box_predictor,
+                 bbox_predictor: FRPredictor,
                  # Faster R-CNN training
                  fg_iou_thresh,
                  bg_iou_thresh,
@@ -96,7 +99,7 @@ class RoIHead(nn.Module):
                  score_thresh,
                  nms_thresh,
                  detections_per_img):
-        super(RoIHead, self).__init__()
+        super(FRHead, self).__init__()
         if bbox_reg_weights is None:
             bbox_reg_weights = (10., 10., 5., 5.)
         self.box_coder = det_utils.BoxCoder(bbox_reg_weights)
@@ -118,17 +121,21 @@ class RoIHead(nn.Module):
 
         self.canonical_scale = 224
         self.canonical_level = 4
-        self.box_predictor = box_predictor
+        self.bbox_predictor = bbox_predictor
 
     def forward(self,
+                support,
                 features,  # type: Dict[str, Tensor]
                 proposals,  # type: List[Tensor]
                 image_shapes,  # type: List[Tuple[int, int]]
+                Woodubry,
                 targets=None  # type: Optional[List[Dict[str, Tensor]]]
                 ):
         # type: (...) -> Tuple[List[Tensor], List[Tensor], List[Tensor], Tuple[Tensor], Tensor]
         r"""
         N为提出区域数量
+        :param Woodubry:
+        :param support:
         :param features: {'0': [torch.Size([640, 48, 64]), ...]}
         :param proposals: [torch.Size([100, 4]), ...]
         :param image_shapes: query_images.image_sizes: [(750, 1000), ...]
@@ -166,8 +173,9 @@ class RoIHead(nn.Module):
         # https://img-blog.csdnimg.cn/20210325100419717.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3ByYWd1ZTY2OTU=,size_16,color_FFFFFF,t_70
         # FeatureAlign
         boxes_features = self.box_roi_align(features, proposals, image_shapes)
-        class_logits, box_regression = self.box_predictor(boxes_features)
-
+        # resize之前, 有多少个roi
+        n = boxes_features.shape[0]
+        class_logits, box_regression = self.bbox_predictor.forward(support, boxes_features)
         result: List[Dict[str, torch.Tensor]] = []
         losses = {}
         if self.training:
@@ -189,6 +197,8 @@ class RoIHead(nn.Module):
                         "scores": scores[i],
                     }
                 )
+
+        return result, losses
 
     def box_roi_align(
             self,

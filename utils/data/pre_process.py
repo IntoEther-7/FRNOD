@@ -8,7 +8,7 @@ from PIL import Image
 from torchvision.transforms import transforms
 
 
-def pre_process(support_dict: dict, query: list, query_anns: list,
+def pre_process(support: dict, query: list, query_anns: list, val, val_anns,
                 support_n: list = None,
                 support_transforms=transforms.Compose([transforms.ToTensor(),
                                                        transforms.Resize((320, 320))]),
@@ -26,14 +26,16 @@ def pre_process(support_dict: dict, query: list, query_anns: list,
     :param support_n:
     :return: 如果有s_n, 则返回s_c, s_n, q_c, gt_bboxes, labels, 否则返回s_c, q_c, gt_bboxes, labels
     """
-    s_c = transform_support(support_dict, support_transforms, is_cuda)
+    s_c = transform_support(support, support_transforms, is_cuda)
     q_c = transform_query(query, query_transforms, is_cuda)
-    q_anns = transform_anns(query_anns, is_cuda)
+    q_anns = transform_anns(query_anns, is_cuda, is_zero=True)
+    val = transform_query(val, query_transforms, is_cuda)
+    val_anns = transform_anns(val_anns, is_cuda, is_zero=True)
     if support_n:
         s_n = transform_support(support_n, support_transforms, is_cuda)
-        return s_c, s_n, q_c, q_anns
+        return s_c, s_n, q_c, q_anns, val, val_anns
     else:
-        return s_c, q_c, q_anns
+        return s_c, q_c, q_anns, val, val_anns
 
 
 def transform_support(support_and_ann, transforms, is_cuda):
@@ -62,7 +64,7 @@ def transform_query(query, transforms, is_cuda):
     return query_tensors
 
 
-def transform_anns(query_anns, is_cuda):
+def transform_anns(query_anns, is_cuda, is_zero):
     anns = []
     for query_ann in query_anns:  # 每张图片的ann
         # print('---------------')
@@ -73,7 +75,10 @@ def transform_anns(query_anns, is_cuda):
             i = i[0]
             # print(i)
             img_bboxes.append([i['bbox'][0], i['bbox'][1], i['bbox'][0] + i['bbox'][2], i['bbox'][1] + i['bbox'][3]])
-            img_labels.append(i['category_id'])
+            if is_zero:
+                img_labels.append(0)
+            else:
+                img_labels.append(i['category_id'])
             if is_cuda:
                 ann_img = {'boxes': torch.tensor(img_bboxes).cuda(), 'labels': torch.tensor(img_labels).cuda()}
             else:
@@ -103,11 +108,36 @@ def crop_support(imgPath, bbox, is_show=False):
         img_crop.show()
     return img_crop  # type: PIL.Image
 
-# if __name__ == '__main__':
-#     from utils.data.dataset import FsodDataset
-#
-#     fsod = FsodDataset(root='../../datasets/fsod/', annFile='../../datasets/fsod/annotations/fsod_test.json',
-#                        support_shot=5,
-#                        query_shot=5, seed=114514)
-#     support, query, query_anns = fsod[10]
-#     anns = transform_anns(query_anns, is_cuda=False)
+
+def label2dict(detection, val_anns_ori_single):
+    res = []
+
+    for i in detection:
+        boxes = i['boxes'].tolist()
+        labels = i['labels'].tolist()
+        scores = i['scores'].tolist()
+        for j in range(len(labels)):
+            x1, y1, x2, y2 = boxes[j]
+            w = x2 - x1
+            h = y2 - y1
+            box = [x1, y1, w, h]
+            res.append({'image_id': val_anns_ori_single[0][0]['image_id'], 'bbox': box,
+                        'category_id':val_anns_ori_single[0][0]['category_id']})
+            # img_res = []
+            # if not len(i['scores'] == 0):
+            #     i['scores']
+            #     for xyxy in i['boxes'].tolist():
+            #         x1, y1, x2, y2 = xyxy
+            #         # x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
+            #         w = x2 - x1
+            #         h = y2 - y1
+            # if __name__ == '__main__':
+            #     from utils.data.dataset import FsodDataset
+            #
+            #     fsod = FsodDataset(root='../../datasets/fsod/', annFile='../../datasets/fsod/annotations/fsod_test.json',
+            #                        support_shot=5,
+            #                        query_shot=5, seed=114514)
+            #     support, query, query_anns = fsod[10]
+            #     anns = transform_anns(query_anns, is_cuda=False)
+    return res
+

@@ -20,7 +20,7 @@ from models.QueryBranch import QueryBranch
 from models.roi_align import FeatureAlign
 from models.FRNOD import FRNOD
 from models.SupportBranch import SupportBranch
-from models.BoxRegression import BoxRegression
+from models.BoxRegression_dateout import BoxRegression
 
 if __name__ == '__main__':
     # root = 'datasets/fsod'
@@ -77,14 +77,8 @@ if __name__ == '__main__':
     # 框回归
     box_regression = BoxRegression(in_channels=channels * resolution, representation_size=512)
     # 网络
-    frnod = FRNOD(way=2,
-                  shot=1,
-                  query_shot=5,
-                  backbone=backbone,
-                  support_branch=support_branch,
-                  query_branch=query_branch,
-                  roi_align=feature_align,
-                  box_regression=box_regression,
-                  post_nms_top_n=post_nms_top_n)
+    frnod = FRNOD(way=2, shot=1, query_shot=5, backbone=backbone, support_branch=support_branch,
+                  query_branch=query_branch, roi_head=feature_align, box_regression=box_regression,
+                  post_nms_top_n=post_nms_top_n, is_cuda=)
 
     losses = frnod.forward_train_trituple(s_c, s_n, q_c_list, targets=q_anns, scale=1.)

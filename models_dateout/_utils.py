@@ -360,14 +360,14 @@ def smooth_l1_loss(input, target, beta: float = 1. / 9, size_average: bool = Tru
 def overwrite_eps(model, eps):
     """
     This method overwrites the default eps values of all the
-    FrozenBatchNorm2d layers of the model with the provided value.
+    FrozenBatchNorm2d layers of the models with the provided value.
     This is necessary to address the BC-breaking change introduced
     by the bug-fix at pytorch/vision#2933. The overwrite is applied
     only when the pretrained weights_1 are loaded to maintain compatibility
     with previous versions.
 
     Args:
-        model (nn.Module): The model on which we perform the overwrite.
+        model (nn.Module): The models on which we perform the overwrite.
         eps (float): The new value of eps.
     """
     for module in model.modules():

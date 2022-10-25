@@ -19,7 +19,7 @@ if __name__ == '__main__':
     root = 'datasets/fsod'
     train_json = 'datasets/fsod/annotations/fsod_train.json'
     test_json = 'datasets/fsod/annotations/fsod_test.json'
-    fsod = FsodDataset(root, test_json, support_shot=2, query_shot=2)
+    fsod = FsodDataset(root, test_json, support_shot=2, val_shot=2)
     s_c, s_n, q_c_list, q_anns = fsod.triTuple(catId=1)
     s_c, s_n, q_c_list, q_anns = pre_process(s_c, q_c_list, q_anns, s_n)
     print('s_c      : ', s_c.shape)
@@ -63,7 +63,7 @@ if __name__ == '__main__':
     # roiAlign = MultiScaleRoIAlign(featmap_names=['0'], output_size=[5, 5], sampling_ratio=0.2)
     # roiHeads = RoIHeads(box_roi_pool=roiAlign,
     #                     box_head=None,
-    #                     box_predictor=None,
+    #                     bbox_predictor=None,
     #                     fg_iou_thresh=0.7,
     #                     bg_iou_thresh=0.3,
     #                     batch_size_per_image=256,
@@ -78,11 +78,7 @@ if __name__ == '__main__':
     print(q_anns)
     proposals, proposal_losses, features, query_images, targets = rcnn.forward(q_c_list, q_anns)
     del backbone, rcnn, rpn, rpnHead, anchorGenerator, t, root, train_json, test_json, fsod, s_c, s_n, q_c_list, q_anns
-    proposals, matched_idxs, labels, regression_targets, boxes_features = featureAlign.forward(
-        features=features,
-        proposals=proposals,
-        image_shapes=query_images.image_sizes,
-        targets=targets)
+    proposals, matched_idxs, labels, regression_targets, boxes_features = featureAlign.forward(,
     print('proposals:   ',[i.shape for i in proposals])
     print('box_features:', boxes_features.shape)  # (202, 64, 20, 20)
     del featureAlign
@@ -95,4 +91,4 @@ if __name__ == '__main__':
     from torchvision.ops.roi_align import RoIAlign
     from torchvision.models.detection.faster_rcnn import TwoMLPHead
 
-    # from torchvision.models.detection.
+    # from torchvision.models_dateout.detection.
