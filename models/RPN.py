@@ -50,7 +50,11 @@ class RPN(RegionProposalNetwork):
         # RPN uses all feature maps that are available
         features = list(features.values())
         features_l = []
-        s_r = self.s[0].permute(1, 0).mean([1]).reshape(1, -1, 1, 1)
+        # attention?
+        way = self.s.shape[0]
+        resolution = self.s.shape[1]
+        channels = self.s.shape[2]
+        s_r = self.s.permute(0, 2, 1).mean([2]).reshape(way, channels, 1, 1)
         for feature in features:
             feature = feature * s_r
             features_l.append(feature)
@@ -60,7 +64,7 @@ class RPN(RegionProposalNetwork):
 
         num_images = len(anchors)
         num_anchors_per_level_shape_tensors = [o[0].shape for o in objectness]
-        num_anchors_per_level = [s[0] * s[1] * s[2] for s in num_anchors_per_level_shape_tensors]
+        num_anchors_per_level = [s[0] * s[1] * s[2] for s in num_anchors_per_level_shape_tensors] * way
         objectness, pred_bbox_deltas = \
             concat_box_prediction_layers(objectness, pred_bbox_deltas)
         # apply pred_bbox_deltas to anchors to obtain the decoded proposals

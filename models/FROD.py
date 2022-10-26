@@ -78,7 +78,8 @@ class FROD(nn.Module):
         r"""
 
         :param support_list: List[support]
-        :param query_images:
+        :param query_images: List[Images]
+        :param targets:
         :return:
         """
         s = self.support_branch(support_list)  # (way, resolution, channel)
