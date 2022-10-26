@@ -3,8 +3,10 @@
 # AUTHOR: 17795
 # TIME: 2022-10-22 16:29
 import json
+import random
 
 import torch
+from pycocotools.coco import COCO
 from torchvision import transforms
 from torchvision.models.detection.anchor_utils import AnchorGenerator
 from torchvision.models.detection.faster_rcnn import FasterRCNN, FastRCNNPredictor
@@ -20,7 +22,8 @@ from utils.data.pre_process import pre_process, label2dict
 from pycocotools.cocoeval import COCOeval
 
 if __name__ == '__main__':
-    is_cuda = False
+    random.seed(114514)
+    is_cuda = True
     way = 2
     num_classes = 3
     support_shot = 5
@@ -97,7 +100,7 @@ if __name__ == '__main__':
                           query_transforms=transforms.Compose([transforms.ToTensor(),
                                                                transforms.Resize(600)]), is_cuda=is_cuda)
         loss_list = []
-        print('--------------------train--------------------')
+        print('train--------------------')
         for j in tqdm(range(len(q_c))):
             q_c_single = [q_c[j]]
             q_c_anns_single = [q_anns[j]]
@@ -117,7 +120,7 @@ if __name__ == '__main__':
         loss_avg = torch.Tensor(loss_list).mean(0)
         print('loss_avg:', loss_avg)
 
-        print('--------------------val--------------------')
+        print('val--------------------')
         model.eval()
         for j in tqdm(range(len(val))):
             detection_list = []
@@ -127,8 +130,20 @@ if __name__ == '__main__':
             detection = model.forward([s_c, s_n], query_images=val_single, targets=val_anns_single)
             # print([(i['labels'], i['scores']) for i in detection], val_anns_ori)
             detection_list.extend(label2dict(detection, val_anns_ori_single))
+            # print('预测结果个数:', len(detection_list))
             eval_results.extend(detection_list)
 
     torch.save(loss_list, 'weights/loss_list.json')
-    with open('datasets/annotations/fsod_prediction.json', 'w') as f:
+    with open('datasets/fsod/annotations/fsod_prediction.json', 'w') as f:
         json.dump(eval_results, f)
+
+
+    # 验证
+    gt_path = "datasets/fsod/annotations/fsod_train.json"  # 存放真实标签的路径
+    dt_path = "datasets/fsod/annotations/fsod_prediction.json"    # 存放检测结果的路径
+    cocoGt = COCO(gt_path)
+    cocoDt = cocoGt.loadRes(dt_path)
+    cocoEval = COCOeval(cocoGt, cocoDt, "bbox")                                             #
+    cocoEval.evaluate()
+    cocoEval.accumulate()
+    cocoEval.summarize()

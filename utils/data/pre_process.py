@@ -121,8 +121,8 @@ def label2dict(detection, val_anns_ori_single):
             w = x2 - x1
             h = y2 - y1
             box = [x1, y1, w, h]
-            res.append({'image_id': val_anns_ori_single[0][0]['image_id'], 'bbox': box,
-                        'category_id':val_anns_ori_single[0][0]['category_id']})
+            res.append({'image_id': val_anns_ori_single[0][0]['image_id'], 'bbox': box, 'score': scores[j],
+                        'category_id': val_anns_ori_single[0][0]['category_id']})
             # img_res = []
             # if not len(i['scores'] == 0):
             #     i['scores']
@@ -140,4 +140,3 @@ def label2dict(detection, val_anns_ori_single):
             #     support, query, query_anns = fsod[10]
             #     anns = transform_anns(query_anns, is_cuda=False)
     return res
-
