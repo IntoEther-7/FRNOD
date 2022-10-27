@@ -8,8 +8,7 @@ from PIL import Image
 from torchvision.transforms import transforms
 
 
-def pre_process(support: dict, query: list, query_anns: list, val, val_anns,
-                support_n: list = None,
+def pre_process(support: list, query: list, query_anns: list, val: list, val_anns: list,
                 support_transforms=transforms.Compose([transforms.ToTensor(),
                                                        transforms.Resize((320, 320))]),
                 query_transforms=transforms.Compose([transforms.ToTensor(),
@@ -26,11 +25,37 @@ def pre_process(support: dict, query: list, query_anns: list, val, val_anns,
     :param support_n:
     :return: 如果有s_n, 则返回s_c, s_n, q_c, gt_bboxes, labels, 否则返回s_c, q_c, gt_bboxes, labels
     """
+    s_c_list = [transform_support(s, support_transforms, is_cuda) for s in support]
+    q_c_list = [transform_query(q, query_transforms, is_cuda) for q in query]
+    q_anns_list = [transform_anns(query_anns[i], is_cuda, i) for i in range(len(query_anns))]
+    val_list = [transform_query(v, query_transforms, is_cuda) for v in val]
+    val_anns_list = [transform_anns(val_anns[i], is_cuda, i) for i in range(len(val_anns))]
+    return s_c_list, q_c_list, q_anns_list, val_list, val_anns_list
+
+
+def pre_process_tri(support: dict, query: list, query_anns: list, val, val_anns,
+                    support_n: list = None,
+                    support_transforms=transforms.Compose([transforms.ToTensor(),
+                                                           transforms.Resize((320, 320))]),
+                    query_transforms=transforms.Compose([transforms.ToTensor(),
+                                                         transforms.Resize(600)]), is_cuda=False):
+    r"""
+    图像处理, 转换成tensor, s_c, s_n为tensor[shot, channel, 320, 320], q_c为[tensor, tensor, ...],
+    gt_bboxes为[标注列表[每张图像的标注[每个盒子的参数]]],
+    labels为[标注列表[每张图像的标签[每个盒子的标签]]]
+    :param support: 支持图, [PIL.Image]
+    :param query: 查询图,
+    :param query_anns: 标注
+    :param support_transforms:
+    :param query_transforms:
+    :param support_n:
+    :return: 如果有s_n, 则返回s_c, s_n, q_c, gt_bboxes, labels, 否则返回s_c, q_c, gt_bboxes, labels
+    """
     s_c = transform_support(support, support_transforms, is_cuda)
     q_c = transform_query(query, query_transforms, is_cuda)
-    q_anns = transform_anns(query_anns, is_cuda, is_zero=True)
+    q_anns = transform_anns(query_anns, is_cuda, label=True)
     val = transform_query(val, query_transforms, is_cuda)
-    val_anns = transform_anns(val_anns, is_cuda, is_zero=True)
+    val_anns = transform_anns(val_anns, is_cuda, label=True)
     if support_n:
         s_n = transform_support(support_n, support_transforms, is_cuda)
         return s_c, s_n, q_c, q_anns, val, val_anns
@@ -64,7 +89,7 @@ def transform_query(query, transforms, is_cuda):
     return query_tensors
 
 
-def transform_anns(query_anns, is_cuda, is_zero):
+def transform_anns(query_anns, is_cuda, label):
     anns = []
     for query_ann in query_anns:  # 每张图片的ann
         # print('---------------')
@@ -75,8 +100,8 @@ def transform_anns(query_anns, is_cuda, is_zero):
             i = i[0]
             # print(i)
             img_bboxes.append([i['bbox'][0], i['bbox'][1], i['bbox'][0] + i['bbox'][2], i['bbox'][1] + i['bbox'][3]])
-            if is_zero:
-                img_labels.append(0)
+            if not label == None:
+                img_labels.append(label)
             else:
                 img_labels.append(i['category_id'])
             if is_cuda:
@@ -109,7 +134,7 @@ def crop_support(imgPath, bbox, is_show=False):
     return img_crop  # type: PIL.Image
 
 
-def label2dict(detection, val_anns_ori_single):
+def label2dict(detection, val_anns_ori_single, label_list):
     res = []
 
     for i in detection:
@@ -122,7 +147,7 @@ def label2dict(detection, val_anns_ori_single):
             h = y2 - y1
             box = [x1, y1, w, h]
             res.append({'image_id': val_anns_ori_single[0][0]['image_id'], 'bbox': box, 'score': scores[j],
-                        'category_id': val_anns_ori_single[0][0]['category_id']})
+                        'category_id': label_list[labels[j]]})
             # img_res = []
             # if not len(i['scores'] == 0):
             #     i['scores']

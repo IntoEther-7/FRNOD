@@ -13,7 +13,7 @@ from models.backbone.Conv_4 import BackBone
 from models.change.box_predictor import FRPredictor
 from models.change.box_head import FRTwoMLPHead
 from utils.data.dataset import FsodDataset
-from utils.data.pre_process import pre_process
+from utils.data.process import pre_process_tri
 from pycocotools.cocoeval import COCOeval
 
 if __name__ == '__main__':
@@ -73,12 +73,12 @@ if __name__ == '__main__':
         print('--------------------epoch:   {}--------------------'.format(i))
         s_c, s_n, q_c_ori, q_anns_ori, val_ori, val_anns_ori = fsod.triTuple(catId=i)
         s_c, s_n, q_c, q_anns, val, val_anns \
-            = pre_process(support=s_c, support_n=s_n,
-                          query=q_c_ori, query_anns=q_anns_ori,
-                          val=val_ori, val_anns=val_anns_ori,
-                          support_transforms=transforms.Compose([transforms.ToTensor(),
+            = pre_process_tri(support=s_c, support_n=s_n,
+                              query=q_c_ori, query_anns=q_anns_ori,
+                              val=val_ori, val_anns=val_anns_ori,
+                              support_transforms=transforms.Compose([transforms.ToTensor(),
                                                                  transforms.Resize(support_size)]),
-                          query_transforms=transforms.Compose([transforms.ToTensor(),
+                              query_transforms=transforms.Compose([transforms.ToTensor(),
                                                                transforms.Resize(600)]), is_cuda=is_cuda)
         result = model.forward([s_c, s_n], query_images=q_c, targets=q_anns)
         print(result)

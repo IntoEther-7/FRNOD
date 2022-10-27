@@ -82,7 +82,7 @@ class FRPredictor(nn.Module):
         metric_matrix = self.metric(euclidean_matrix,
                                     box_per_image=n,
                                     resolution=self.resolution)  # (roi数, way)
-        logits = -metric_matrix * self.scale  # (roi数, way)
+        logits = metric_matrix * self.scale  # (roi数, way)
         return logits
 
     def reconstruct_feature_map(self, support: torch.Tensor, query: torch.Tensor, Woodubry=True):
@@ -93,7 +93,7 @@ class FRPredictor(nn.Module):
         :param alpha: alpha
         :param beta: beta
         :param Woodubry: 是否使用Woodbury等式, 不使用的话就是用优化后的Woodbury等式
-        :return:
+        :return: 重构的特征
         """
         # kr/d
         alpha = self.r[0]
@@ -120,8 +120,11 @@ class FRPredictor(nn.Module):
             # https://ether-bucket-nj.oss-cn-nanjing.aliyuncs.com/img/image-20220831103223203.png
             # ScT * Sc
             st_s = support_t.matmul(support)  # (way, channel, channel)
-            m_inv = (st_s + torch.eye(st_s.size(-1)).to(st_s.device).unsqueeze(0).mul(
-                lam)).inverse()  # (way, channel, channel)
+            m_inv = st_s + torch.eye(st_s.size(-1)).to(st_s.device).unsqueeze(0)
+            m_inv = m_inv.mul(lam)
+            m_inv = m_inv.inverse()
+            # m_inv_1 = (st_s + torch.eye(st_s.size(-1)).to(st_s.device).unsqueeze(0).
+            #            mul(lam)).inverse()  # (way, channel, channel)
             hat = m_inv.matmul(st_s)
         else:
             # channel > kr 建议使用eq8
@@ -134,14 +137,14 @@ class FRPredictor(nn.Module):
 
         Q_bar = query.matmul(hat).mul(rho)  # (way, way*query_shot*resolution, channel)
 
-        return Q_bar
+        return Q_bar  # 重构的特征
 
     def euclidean_metric(self, query: torch.Tensor, Q_bar: torch.Tensor):
         r"""
         欧几里得度量矩阵
         :param query: 查询图特征
         :param Q_bar: 预算查询图特征
-        :return: 返回欧几里得距离
+        :return: 返回欧几里得距离矩阵
         """
         # query:                                [roi数 * resolution, d]
         # query.unsqueeze(0):                   [1, roi数 * resolution, d]
@@ -153,8 +156,8 @@ class FRPredictor(nn.Module):
         #                                       [way * shot, roi数 * resolution]
         # x.permute(1,0)将x的第0个维度和第一个维度互换了
         #                                       [roi数 * resolution, way * shot]
-        euclidean_matrix = (Q_bar - query.unsqueeze(0)).pow(2).sum(2).permute(1, 0)  # [roi数 * resolution, way * shot]
-        return euclidean_matrix
+        euclidean_matrix = (Q_bar - query.unsqueeze(0)).pow(2).sum(2).permute(1, 0)  # [roi数 * resolution, way]
+        return euclidean_matrix  # 距离矩阵
 
     def metric(self, euclidean_matrix, box_per_image, resolution):
         r"""
@@ -163,16 +166,20 @@ class FRPredictor(nn.Module):
         :param way: way
         :param query_shot: 广播用
         :param resolution: 分辨率
-        :return: 返回距离计算
+        :return: 返回距离计算, 负数, 也就是可以当scores
         """
         # euclidean_matrix: [roi数 * resolution, way]
         # .neg():           [roi数 * resolution, way]
         # .view():          [roi数, resolution, way]
         # .mean(1):         (query_shot, way)
-        metric_matrix = euclidean_matrix. \
-            neg(). \
-            contiguous(). \
-            view(box_per_image, resolution, self.way) \
-            .mean(1)  # (roi数, way)
-
+        # metric_matrix_1 = euclidean_matrix. \
+        #     neg(). \
+        #     contiguous(). \
+        #     view(box_per_image, resolution, self.way) \
+        #     .mean(1)  # (roi数, way)
+        metric_matrix = euclidean_matrix
+        metric_matrix = metric_matrix.neg()
+        metric_matrix = metric_matrix.contiguous()
+        metric_matrix = metric_matrix.view(box_per_image, resolution, self.way)
+        metric_matrix = metric_matrix.mean(1)  # (roi数, way)
         return metric_matrix

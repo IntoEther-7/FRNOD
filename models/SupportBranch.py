@@ -16,11 +16,16 @@ class SupportBranch(nn.Module):
 
     def forward(self, support_list):
         s_list = []
+        # for support in support_list:
+        #     support = self.backbone(support)
+        #     support = support.view(self.shot, self.channels, self.resolution). \
+        #         permute(0, 2, 1)  # shot, resolution, channel
+        #     support = support.mean(0).unsqueeze(0)
+        #     s_list.append(support)
+        # s = torch.cat(s_list)  # (way, resolution, channel)
         for support in support_list:
-            support = self.backbone(support)
-            support = support.view(self.shot, self.channels, self.resolution). \
-                permute(0, 2, 1)  # shot, resolution, channel
+            support = self.backbone(support)  # (shot, channels, s, s)
             support = support.mean(0).unsqueeze(0)
             s_list.append(support)
-        s = torch.cat(s_list)  # (way, resolution, channel)
+        s = torch.cat(s_list)  # (way, channels, s, s)
         return s

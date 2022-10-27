@@ -7,7 +7,8 @@ from torchvision.models.detection.faster_rcnn import FasterRCNN, TwoMLPHead, Fas
 import torch
 from torch import nn
 from torchvision.models.detection.generalized_rcnn import GeneralizedRCNN
-from torchvision.models.detection.roi_heads import RoIHeads
+# from torchvision.models.detection.roi_heads import RoIHeads
+from models.RoIHeads import RoIHeads
 from torchvision.models.detection.rpn import RPNHead
 from torchvision.models.detection.transform import GeneralizedRCNNTransform
 from torchvision.ops import MultiScaleRoIAlign

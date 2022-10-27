@@ -51,10 +51,10 @@ class RPN(RegionProposalNetwork):
         features = list(features.values())
         features_l = []
         # attention?
+        # self.s (way, c, s, s)
         way = self.s.shape[0]
-        resolution = self.s.shape[1]
-        channels = self.s.shape[2]
-        s_r = self.s.permute(0, 2, 1).mean([2]).reshape(way, channels, 1, 1)
+        channels = self.s.shape[1]
+        s_r = self.s.mean([2, 3]).reshape(way, channels, 1, 1)
         for feature in features:
             feature = feature * s_r
             features_l.append(feature)

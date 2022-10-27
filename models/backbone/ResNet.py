@@ -174,6 +174,7 @@ class ResNet(nn.Module):
         super(ResNet, self).__init__()
         self.name = 'resnet12'
         self.num_channel = 640
+        self.out_channels = 640
         self.inplanes = 3
         self.layer1 = self._make_layer(block, n_blocks[0], 64,
                                        stride=2, drop_rate=drop_rate)

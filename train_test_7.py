@@ -12,7 +12,7 @@ from torchvision.transforms import transforms
 from models.box_predictor import FRPredictor
 from models.roi_head import FRHead
 from utils.data.dataset import FsodDataset
-from utils.data.pre_process import pre_process
+from utils.data.process import pre_process_tri
 from models.backbone.ResNet import resnet12
 from models.backbone.Conv_4 import BackBone
 from torchvision.models.detection.rpn import RegionProposalNetwork, AnchorGenerator, RPNHead
@@ -74,7 +74,7 @@ if __name__ == '__main__':
     # roi_head
     # feature_align = FeatureAlign(output_size=roi_size,
     #                              sampling_ratio=2,
-    #                              fg_iou_thresh=fg_iou_thresh,
+    #                              rpn_fg_iou_thresh=rpn_fg_iou_thresh,
     #                              bg_iou_thresh=bg_iou_thresh,
     #                              batch_size_per_image=batch_size_per_image,
     #                              positive_fraction=positive_fraction,
@@ -112,15 +112,15 @@ if __name__ == '__main__':
         print('--------------------epoch:   {}--------------------'.format(i))
         s_c, s_n, q_c_list, q_anns = fsod.triTuple(catId=i)
         s_c, s_n, q_c_list, q_anns \
-            = pre_process(s_c,
-                          q_c_list,
-                          q_anns,
-                          s_n,
-                          support_transforms=transforms.Compose([transforms.ToTensor(),
+            = pre_process_tri(s_c,
+                              q_c_list,
+                              q_anns,
+                              s_n,
+                              support_transforms=transforms.Compose([transforms.ToTensor(),
                                                                  transforms.Resize(support_size)]),
-                          query_transforms=transforms.Compose([transforms.ToTensor(),
+                              query_transforms=transforms.Compose([transforms.ToTensor(),
                                                                transforms.Resize(600)]),
-                          is_cuda=is_cuda)
+                              is_cuda=is_cuda)
         result, losses = frnod.forward_train_trituple(s_c, s_n, q_c_list, targets=q_anns, scale=scale)
         print(result)
         print(losses)

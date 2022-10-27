@@ -7,7 +7,7 @@ from torchvision.models.detection import transform
 from torchvision.ops import MultiScaleRoIAlign
 
 from utils.data.dataset import FsodDataset
-from utils.data.pre_process import pre_process
+from utils.data.process import pre_process_tri
 from models.backbone.ResNet import resnet12
 from models.backbone.Conv_4 import BackBone
 from torchvision.models.detection.rpn import RegionProposalNetwork, AnchorGenerator, RPNHead
@@ -21,7 +21,7 @@ if __name__ == '__main__':
     test_json = 'datasets/fsod/annotations/fsod_test.json'
     fsod = FsodDataset(root, test_json, support_shot=2, val_shot=2)
     s_c, s_n, q_c_list, q_anns = fsod.triTuple(catId=1)
-    s_c, s_n, q_c_list, q_anns = pre_process(s_c, q_c_list, q_anns, s_n)
+    s_c, s_n, q_c_list, q_anns = pre_process_tri(s_c, q_c_list, q_anns, s_n)
     print('s_c      : ', s_c.shape)
     print('s_n      : ', s_n.shape)
     print('q_c_list : ', [i.shape for i in q_c_list])
@@ -64,7 +64,7 @@ if __name__ == '__main__':
     # roiHeads = RoIHeads(box_roi_pool=roiAlign,
     #                     box_head=None,
     #                     bbox_predictor=None,
-    #                     fg_iou_thresh=0.7,
+    #                     rpn_fg_iou_thresh=0.7,
     #                     bg_iou_thresh=0.3,
     #                     batch_size_per_image=256,
     #                     positive_fraction=0.5,

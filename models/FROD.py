@@ -71,7 +71,7 @@ class FROD(nn.Module):
                                     bbox_reg_weights)
         self.FRTwoMLPHead = FRTwoMLPHead(in_channels=channels * resolution, representation_size=representation_size)
         self.FRPredictor = FRPredictor(in_channels=representation_size, num_classes=num_classes,
-                                       support=None, catIds=[1, 2], Woodubry=True,
+                                       support=None, catIds=[1, 2], Woodubry=False,
                                        resolution=resolution, channels=channels, scale=scale)
 
     def forward(self, support_list, query_images, targets):
@@ -82,8 +82,10 @@ class FROD(nn.Module):
         :param targets:
         :return:
         """
-        s = self.support_branch(support_list)  # (way, resolution, channel)
-        self.box_predictor.support = s
+        way = len(support_list)
+        s = self.support_branch(support_list)  # (way, channel, s, s)
+        self.box_predictor.support = \
+            s.view(way, self.channels, self.resolution).permute(0, 2, 1)  # (way, resolution, channel)
         self.fast_rcnn.rpn.s = s
         result = self.fast_rcnn.forward(query_images, targets)
         return result

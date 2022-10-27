@@ -94,12 +94,13 @@ class FsodDataset(Dataset):
         val_anns = self.val_anns_list[catId - 1]
         return s_c, s_n, q_c, q_anns, val, val_anns
 
-    def n_way_k_shot(self, way):
-        self.sample_list = copy.deepcopy(self.coco.cats.keys())
-        random.shuffle(self.sample_list)
-        self.num_mission = len(self.sample_list) // way
-        self.mission = []
-        return [self.sample_list[i * way: (i + 1) * way] for i in range(self.num_mission)]
+    def n_way_k_shot(self, catIds):
+        s_c_list = [self.support_list[catId - 1] for catId in catIds]
+        q_c_list = [self.query_list[catId - 1] for catId in catIds]
+        q_anns_list = [self.query_anns_list[catId - 1] for catId in catIds]
+        val_list = [self.val_list[catId - 1] for catId in catIds]
+        val_anns_list = [self.val_anns_list[catId - 1] for catId in catIds]
+        return s_c_list, q_c_list, q_anns_list, val_list, val_anns_list
 
     def get_n_way_k_shot(self, mission_id):
         catIds = self.mission[mission_id]
