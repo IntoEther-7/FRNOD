@@ -96,7 +96,7 @@ if __name__ == '__main__':
                  box_positive_fraction=0.25,
                  bbox_reg_weights=None)
 
-    weight = torch.load('weights/frnod150.pth')
+    weight = torch.load('weights/frnod159.pth')
     model.load_state_dict(state_dict=weight['models'])
 
     if is_cuda:
@@ -109,10 +109,10 @@ if __name__ == '__main__':
     random.shuffle(cat_list)
     num_epoch = len(cat_list) // way
     fine_epoch = int(num_epoch * 0.7)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.02)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.02, momentum=0.9)
     for i in range(num_epoch):
         if i == fine_epoch:
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.002)
+            optimizer = torch.optim.SGD(model.parameters(), lr=0.002, momentum=0.9)
         print('--------------------epoch: {} / {}--------------------'.format(i + 1, len(cat_list) // way))
         print('load data----------------')
         catIds = cat_list[i * way:(i + 1) * way]

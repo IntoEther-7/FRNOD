@@ -99,92 +99,103 @@ if __name__ == '__main__':
     if is_cuda:
         model.cuda()
 
-    loss_list = []
-    loss_avg_list = []
-    eval_results = []
     cat_list = [i for i in range(1, 801)]
     random.shuffle(cat_list)
     num_epoch = len(cat_list) // way
+    big_epoch = 10
     fine_epoch = int(num_epoch * 0.7)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.02)
-    for i in range(num_epoch):
-        if i == fine_epoch:
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.002)
-        print('--------------------epoch: {} / {}--------------------'.format(i + 1, len(cat_list) // way))
-        print('load data----------------')
-        catIds = cat_list[i * way:(i + 1) * way]
-        print('catIds:', catIds)
-        s_c_list_ori, q_c_list_ori, q_anns_list_ori, val_list_ori, val_anns_list_ori \
-            = fsod.n_way_k_shot(catIds)
-        s_c_list, q_c_list, q_anns_list, val_list, val_anns_list \
-            = pre_process(s_c_list_ori, q_c_list_ori,
-                          q_anns_list_ori,
-                          val_list_ori, val_anns_list_ori,
-                          support_transforms=transforms.Compose(
-                              [transforms.ToTensor(),
-                               transforms.Resize(support_size)]),
-                          query_transforms=transforms.Compose(
-                              [transforms.ToTensor(),
-                               transforms.Resize(600)]),
-                          is_cuda=is_cuda)
-        # print(s_c_list, q_c_list, q_anns_list, val_list, val_anns_list)
-        model.train()
-        print('train--------------------')
-        loss_list_tmp = []
-        for c_index in range(len(q_c_list)):
-            qs = q_c_list[c_index]
-            qs_anns = q_anns_list[c_index]
-            for index in tqdm(range(len(qs)), desc='第{} / {}个类别'.format(c_index + 1, len(q_c_list))):
-                q = qs[index]
-                target = qs_anns[index]
-                result = model.forward(s_c_list, query_images=[q], targets=[target])
-                loss = result['loss_classifier'] + result['loss_box_reg'] + result['loss_objectness'] + result[
-                    'loss_rpn_box_reg']
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                # print('loss:    ', loss)
-                loss_list_tmp.append(float(loss))
-                if (i + 1) % 10 == 0:
-                    torch.save({'models': model.state_dict()}, 'weights/frnod{}.pth'.format(i))
+    all_loss_list = []
+    all_loss_avg_list = []
+    for e in range(big_epoch):
+        print('----------------------------------big_epoch: {} / {}-----------------------------------'.format(i + 1,
+                                                                                                               len(cat_list) // way))
+        loss_list = []
+        loss_avg_list = []
+        eval_results = []
+        for i in range(num_epoch):
+            if i == fine_epoch:
+                optimizer = torch.optim.SGD(model.parameters(), lr=0.002)
+            print('--------------------epoch: {} / {}--------------------'.format(i + 1, len(cat_list) // way))
+            print('load data----------------')
+            catIds = cat_list[i * way:(i + 1) * way]
+            print('catIds:', catIds)
+            s_c_list_ori, q_c_list_ori, q_anns_list_ori, val_list_ori, val_anns_list_ori \
+                = fsod.n_way_k_shot(catIds)
+            s_c_list, q_c_list, q_anns_list, val_list, val_anns_list \
+                = pre_process(s_c_list_ori, q_c_list_ori,
+                              q_anns_list_ori,
+                              val_list_ori, val_anns_list_ori,
+                              support_transforms=transforms.Compose(
+                                  [transforms.ToTensor(),
+                                   transforms.Resize(support_size)]),
+                              query_transforms=transforms.Compose(
+                                  [transforms.ToTensor(),
+                                   transforms.Resize(600)]),
+                              is_cuda=is_cuda)
+            # print(s_c_list, q_c_list, q_anns_list, val_list, val_anns_list)
+            model.train()
+            print('train--------------------')
+            loss_list_tmp = []
+            for c_index in range(len(q_c_list)):
+                qs = q_c_list[c_index]
+                qs_anns = q_anns_list[c_index]
+                for index in tqdm(range(len(qs)), desc='第{} / {}个类别'.format(c_index + 1, len(q_c_list))):
+                    q = qs[index]
+                    target = qs_anns[index]
+                    result = model.forward(s_c_list, query_images=[q], targets=[target])
+                    loss = result['loss_classifier'] + result['loss_box_reg'] \
+                           + result['loss_objectness'] + result['loss_rpn_box_reg']
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+                    # print('loss:    ', loss)
+                    loss_list_tmp.append(float(loss))
+                    if (i + 1) % 10 == 0:
+                        torch.save({'models': model.state_dict()}, 'weights/frnod{}_{}.pth'.format(e + 1, i + 1))
 
-        loss_list.extend(loss_list_tmp)
-        loss_avg = float(torch.Tensor(loss_list_tmp).mean(0))
-        loss_avg_list.append(loss_avg)
-        print('loss_avg:', loss_avg)
+            loss_list.extend(loss_list_tmp)
+            loss_avg = float(torch.Tensor(loss_list_tmp).mean(0))
+            loss_avg_list.append(loss_avg)
+            print('loss_avg:', loss_avg)
+            all_loss_list.extend(loss_list)
+            all_loss_avg_list.extend(loss_avg_list)
 
-        print('validation---------------')
+            print('validation---------------')
 
-        model.eval()
-        for c_index in range(len(val_list)):
-            vals = val_list[c_index]
-            vals_anns = val_anns_list[c_index]
-            vals_anns_ori = val_anns_list_ori[c_index]
-            for index in tqdm(range(len(vals)), desc='第{} / {}个类别'.format(c_index + 1, len(val_list))):
-                v = vals[index]
-                target = vals_anns[index]
-                target_ori = vals_anns_ori[index]
-                detection = model.forward(s_c_list, query_images=[v], targets=[target])
-                # pprint(detection)
-                # pprint(target_ori)
-                detection_list = label2dict(detection, target_ori, catIds)
-                eval_results.extend(detection_list)
+            model.eval()
+            for c_index in range(len(val_list)):
+                vals = val_list[c_index]
+                vals_anns = val_anns_list[c_index]
+                vals_anns_ori = val_anns_list_ori[c_index]
+                for index in tqdm(range(len(vals)), desc='第{} / {}个类别'.format(c_index + 1, len(val_list))):
+                    v = vals[index]
+                    target = vals_anns[index]
+                    target_ori = vals_anns_ori[index]
+                    detection = model.forward(s_c_list, query_images=[v], targets=[target])
+                    # pprint(detection)
+                    # pprint(target_ori)
+                    detection_list = label2dict(detection, target_ori, catIds)
+                    eval_results.extend(detection_list)
 
-    # torch.save(loss_avg_list, 'weights/loss_avg_list.json')
-    with open('weights/loss.json', 'w') as f:
-        json.dump({'loss_list': loss_list, 'loss_avg_list': loss_avg_list}, f)
+        # torch.save(loss_avg_list, 'weights/loss_avg_list.json')
+        with open('weights/loss_{}.json'.format(e + 1), 'w') as f:
+            json.dump({'loss_list': loss_list, 'loss_avg_list': loss_avg_list}, f)
 
-    with open('datasets/fsod/annotations/fsod_prediction.json', 'w') as f:
-        json.dump(eval_results, f)
+        with open('datasets/fsod/annotations/fsod_prediction_{}.json'.format(e + 1), 'w') as f:
+            json.dump(eval_results, f)
+
+    with open('weights/loss_all.json'.format(e + 1), 'w') as f:
+        json.dump({'loss_list': all_loss_list, 'loss_avg_list': all_loss_avg_list}, f)
     # 验证
-    gt_path = "datasets/fsod/annotations/fsod_train.json"  # 存放真实标签的路径
-    dt_path = "datasets/fsod/annotations/fsod_prediction.json"  # 存放检测结果的路径
-    cocoGt = COCO(gt_path)
-    cocoDt = cocoGt.loadRes(dt_path)
-    cocoEval = COCOeval(cocoGt, cocoDt, "bbox")  #
-    cocoEval.evaluate()
-    cocoEval.accumulate()
-    cocoEval.summarize()
+    # gt_path = "datasets/fsod/annotations/fsod_train.json"  # 存放真实标签的路径
+    # dt_path = "datasets/fsod/annotations/fsod_prediction.json"  # 存放检测结果的路径
+    # cocoGt = COCO(gt_path)
+    # cocoDt = cocoGt.loadRes(dt_path)
+    # cocoEval = COCOeval(cocoGt, cocoDt, "bbox")  #
+    # cocoEval.evaluate()
+    # cocoEval.accumulate()
+    # cocoEval.summarize()
     # for i in range(1, 801):
     #     if i == 601:
     #         optimizer = torch.optim.SGD(model.parameters(), lr=0.0002)
