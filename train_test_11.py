@@ -27,7 +27,7 @@ if __name__ == '__main__':
     random.seed(114514)
     is_cuda = True
     way = 5
-    num_classes = 5
+    num_classes = 6
     support_shot = 5
     query_shot = 5
     # 超参
@@ -35,12 +35,13 @@ if __name__ == '__main__':
     rpn_bg_iou_thresh = 0.5
     batch_size_per_image = 256
     positive_fraction = 0.5
-    channels = 64
+    # channels = 64
+    channels = 128
     rpn_positive_fraction = 0.7
-    # rpn_pre_nms_top_n = {'training': 12000, 'testing': 12000}
-    # rpn_post_nms_top_n = {'training': 2000, 'testing': 2000}
-    rpn_pre_nms_top_n = {'training': 6000, 'testing': 6000}
-    rpn_post_nms_top_n = {'training': 200, 'testing': 200}
+    rpn_pre_nms_top_n = {'training': 12000, 'testing': 12000}
+    rpn_post_nms_top_n = {'training': 2000, 'testing': 2000}
+    # rpn_pre_nms_top_n = {'training': 6000, 'testing': 6000}
+    # rpn_post_nms_top_n = {'training': 20, 'testing': 20}
     roi_size = (7, 7)
     support_size = (roi_size[0] * 16, roi_size[1] * 16)
     resolution = roi_size[0] * roi_size[1]
@@ -48,7 +49,8 @@ if __name__ == '__main__':
     scale = 1.
     representation_size = 1024
 
-    backbone = BackBone(num_channel=channels)
+    # backbone = BackBone(num_channel=channels)
+    backbone = resnet12(out_channels=channels, drop_rate=0.)
     anchor_generator = AnchorGenerator(sizes=((64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
     roi_pooler = MultiScaleRoIAlign(['0'], output_size=roi_size, sampling_ratio=2)
     root = 'datasets/fsod'
@@ -63,12 +65,12 @@ if __name__ == '__main__':
     #                             support=support, catIds=[1, 2], Woodubry=True,
     #                             resolution=resolution, channels=channels, scale=scale)
     # box_predictor = FastRCNNPredictor(in_channels=3, num_classes=None)
-    model = FROD(shot=support_shot, representation_size=representation_size,
+    model = FROD(shot=support_shot, representation_size=representation_size, roi_size=roi_size,
                  resolution=resolution,
                  channels=channels,
                  scale=scale,
                  backbone=backbone,
-                 num_classes=way,
+                 num_classes=num_classes,
                  min_size=600,
                  max_size=1000,
                  image_mean=[0.48898793804461593, 0.45319346269085636, 0.40628443137676473],
@@ -93,7 +95,7 @@ if __name__ == '__main__':
                  box_detections_per_img=100,  # coco要求
                  box_fg_iou_thresh=0.5,
                  box_bg_iou_thresh=0.5,
-                 box_batch_size_per_image=64,
+                 box_batch_size_per_image=100,
                  box_positive_fraction=0.25,
                  bbox_reg_weights=None)
 
@@ -110,8 +112,8 @@ if __name__ == '__main__':
     all_loss_avg_list = []
 
     # ----------------------------------------------------------------------------------------
-    weight = torch.load('weights/frnod1_160.pth')
-    model.load_state_dict(weight['models'])
+    # weight = torch.load('weights/frnod1_160.pth')
+    # model.load_state_dict(weight['models'])
     # ----------------------------------------------------------------------------------------
 
     for e in range(1, 10):
@@ -122,6 +124,8 @@ if __name__ == '__main__':
         loss_list = []
         loss_avg_list = []
         eval_results = []
+        val_loss_list = []
+        val_loss_avg_list = []
         for i in range(num_epoch):
 
             print('--------------------epoch: {} / {}--------------------'.format(i + 1, len(cat_list) // way))
@@ -171,6 +175,30 @@ if __name__ == '__main__':
 
             # 验证----------------------------------------------
             print('validation---------------')
+
+            loss_list_tmp = []
+            for c_index in range(len(val_list)):
+                vals = val_list[c_index]
+                vals_anns = val_anns_list[c_index]
+                vals_anns_ori = val_anns_list_ori[c_index]
+                for index in tqdm(range(len(vals)), desc='第{} / {}个类别'.format(c_index + 1, len(val_list))):
+                    v = vals[index]
+                    target = vals_anns[index]
+                    target_ori = vals_anns_ori[index]
+                    result = model.forward(s_c_list, query_images=[v], targets=[target])
+                    loss = result['loss_classifier'] + result['loss_box_reg'] \
+                           + result['loss_objectness'] + result['loss_rpn_box_reg']
+                    # pprint(detection)
+                    # pprint(target_ori)
+                    # 一个任务的val_loss列表
+                    loss_list_tmp.append(float(loss))
+
+            val_loss_list.extend([loss_list_tmp])
+            loss_avg = float(torch.Tensor(loss_list_tmp).mean(0))
+            val_loss_avg_list.append(loss_avg)
+            print('val_loss_avg:', loss_avg)
+
+            print('validation detection---------------')
             tmp_detection_list = []
             model.eval()
             for c_index in range(len(val_list)):
@@ -201,10 +229,8 @@ if __name__ == '__main__':
             # cocoEval.summarize()
 
         with open('weights/results/loss_bepoch{}.json'.format(e + 1), 'w') as f:
-            json.dump({'loss_list': loss_list, 'loss_avg_list': loss_avg_list}, f)
-
-        with open('weights/results/fsod_prediction_bepoch{}.json'.format(e + 1), 'w') as f:
-            json.dump(eval_results, f)
+            json.dump({'loss_list': loss_list, 'loss_avg_list': loss_avg_list, 'val_loss_list': val_loss_list,
+                       'val_loss_avg_list': val_loss_avg_list}, f)
 
     with open('weights/results/loss_all.json', 'w') as f:
         json.dump({'loss_list': all_loss_list, 'loss_avg_list': all_loss_avg_list}, f)

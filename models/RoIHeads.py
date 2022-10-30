@@ -7,15 +7,18 @@ import torchvision
 
 import torch.nn.functional as F
 from torch import nn, Tensor
+from torch.nn import NLLLoss
 
 from torchvision.ops import boxes as box_ops
 
 from torchvision.ops import roi_align
 
-from torchvision.models.detection.roi_heads import det_utils, fastrcnn_loss, maskrcnn_loss, maskrcnn_inference, \
+from torchvision.models.detection.roi_heads import det_utils, maskrcnn_loss, maskrcnn_inference, \
     keypointrcnn_loss, keypointrcnn_inference
 
 from typing import Optional, List, Dict, Tuple
+
+
 class RoIHeads(nn.Module):
     __annotations__ = {
         'box_coder': det_utils.BoxCoder,
@@ -136,7 +139,7 @@ class RoIHeads(nn.Module):
         sampled_pos_inds, sampled_neg_inds = self.fg_bg_sampler(labels)
         sampled_inds = []
         for img_idx, (pos_inds_img, neg_inds_img) in enumerate(
-            zip(sampled_pos_inds, sampled_neg_inds)
+                zip(sampled_pos_inds, sampled_neg_inds)
         ):
             img_sampled_inds = torch.where(pos_inds_img | neg_inds_img)[0]
             sampled_inds.append(img_sampled_inds)
@@ -161,7 +164,7 @@ class RoIHeads(nn.Module):
 
     def select_training_samples(self,
                                 proposals,  # type: List[Tensor]
-                                targets     # type: Optional[List[Dict[str, Tensor]]]
+                                targets  # type: Optional[List[Dict[str, Tensor]]]
                                 ):
         # type: (...) -> Tuple[List[Tensor], List[Tensor], List[Tensor], List[Tensor]]
         self.check_targets(targets)
@@ -196,10 +199,10 @@ class RoIHeads(nn.Module):
         return proposals, matched_idxs, labels, regression_targets
 
     def postprocess_detections(self,
-                               class_logits,    # type: Tensor
+                               class_logits,  # type: Tensor
                                box_regression,  # type: Tensor
-                               proposals,       # type: List[Tensor]
-                               image_shapes     # type: List[Tuple[int, int]]
+                               proposals,  # type: List[Tensor]
+                               image_shapes  # type: List[Tuple[int, int]]
                                ):
         # type: (...) -> Tuple[List[Tensor], List[Tensor], List[Tensor]]
         device = class_logits.device
@@ -223,11 +226,11 @@ class RoIHeads(nn.Module):
             labels = torch.arange(num_classes, device=device)
             labels = labels.view(1, -1).expand_as(scores)
 
-            # 这里没有背景类
+            # 修改
             # remove predictions with the background label
-            # boxes = boxes[:, 1:]
-            # scores = scores[:, 1:]
-            # labels = labels[:, 1:]
+            boxes = boxes[:, 1:]
+            scores = scores[:, 1:]
+            labels = labels[:, 1:]
 
             # batch everything, by making every class prediction be a separate instance
             boxes = boxes.reshape(-1, 4)
@@ -255,10 +258,10 @@ class RoIHeads(nn.Module):
         return all_boxes, all_scores, all_labels
 
     def forward(self,
-                features,      # type: Dict[str, Tensor]
-                proposals,     # type: List[Tensor]
+                features,  # type: Dict[str, Tensor]
+                proposals,  # type: List[Tensor]
                 image_shapes,  # type: List[Tuple[int, int]]
-                targets=None   # type: Optional[List[Dict[str, Tensor]]]
+                targets=None  # type: Optional[List[Dict[str, Tensor]]]
                 ):
         # type: (...) -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]
         """
@@ -399,3 +402,45 @@ class RoIHeads(nn.Module):
             losses.update(loss_keypoint)
 
         return result, losses
+
+
+def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
+    # type: (Tensor, Tensor, List[Tensor], List[Tensor]) -> Tuple[Tensor, Tensor]
+    """
+    Computes the loss for Faster R-CNN.
+
+    Args:
+        class_logits (Tensor)
+        box_regression (Tensor)
+        labels (list[BoxList])
+        regression_targets (Tensor)
+
+    Returns:
+        classification_loss (Tensor)
+        box_loss (Tensor)
+    """
+
+    labels = torch.cat(labels, dim=0)
+    regression_targets = torch.cat(regression_targets, dim=0)
+
+    # criterion = NLLLoss().cuda()
+    # classification_loss = criterion(class_logits, labels)
+    classification_loss = F.cross_entropy(class_logits, labels)
+
+    # get indices that correspond to the regression targets for
+    # the corresponding ground truth labels, to be used with
+    # advanced indexing
+    sampled_pos_inds_subset = torch.where(labels > 0)[0]
+    labels_pos = labels[sampled_pos_inds_subset]
+    N, num_classes = class_logits.shape
+    box_regression = box_regression.reshape(N, box_regression.size(-1) // 4, 4)
+
+    box_loss = det_utils.smooth_l1_loss(
+        box_regression[sampled_pos_inds_subset, labels_pos],
+        regression_targets[sampled_pos_inds_subset],
+        beta=1 / 9,
+        size_average=False,
+    )
+    box_loss = box_loss / labels.numel()
+
+    return classification_loss, box_loss

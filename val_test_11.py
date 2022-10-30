@@ -95,7 +95,7 @@ if __name__ == '__main__':
                  box_detections_per_img=100,  # coco要求
                  box_fg_iou_thresh=0.5,
                  box_bg_iou_thresh=0.5,
-                 box_batch_size_per_image=64,
+                 box_batch_size_per_image=100,
                  box_positive_fraction=0.25,
                  bbox_reg_weights=None)
 

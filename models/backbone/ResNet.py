@@ -170,19 +170,19 @@ class BasicBlock(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, n_blocks, drop_rate=0.0, dropblock_size=5, max_pool=True):
+    def __init__(self, out_channels, block, n_blocks, drop_rate=0.0, dropblock_size=5, max_pool=True):
         super(ResNet, self).__init__()
         self.name = 'resnet12'
-        self.num_channel = 640
-        self.out_channels = 640
+        self.num_channel = out_channels
+        self.out_channels = out_channels
         self.inplanes = 3
-        self.layer1 = self._make_layer(block, n_blocks[0], 64,
+        self.layer1 = self._make_layer(block, n_blocks[0], out_channels // 2,
                                        stride=2, drop_rate=drop_rate)
-        self.layer2 = self._make_layer(block, n_blocks[1], 64,
+        self.layer2 = self._make_layer(block, n_blocks[1], out_channels // 2,
                                        stride=2, drop_rate=drop_rate)
-        self.layer3 = self._make_layer(block, n_blocks[2], 128,
+        self.layer3 = self._make_layer(block, n_blocks[2], out_channels,
                                        stride=2, drop_rate=drop_rate, drop_block=True, block_size=dropblock_size)
-        self.layer4 = self._make_layer(block, n_blocks[3], 128,
+        self.layer4 = self._make_layer(block, n_blocks[3], out_channels,
                                        stride=2, drop_rate=drop_rate, drop_block=True, block_size=dropblock_size,
                                        max_pool=max_pool)
 
@@ -233,15 +233,15 @@ class ResNet(nn.Module):
         return x
 
 
-def resnet12(drop_rate=0.0, max_pool=True, **kwargs):
+def resnet12(out_channels, drop_rate=0.0, max_pool=True, **kwargs):
     """Constructs a ResNet-12 models.
     """
-    model = ResNet(BasicBlock, [1, 1, 1, 1], drop_rate=drop_rate, max_pool=max_pool, **kwargs)
+    model = ResNet(out_channels, BasicBlock, [1, 1, 1, 1], drop_rate=drop_rate, max_pool=max_pool, **kwargs)
     return model
 
 
 if __name__ == '__main__':
-    model = resnet12()
+    model = resnet12(128)
     data = torch.randn(2, 3, 84, 84)
     x = model(data)
     print(x.size())

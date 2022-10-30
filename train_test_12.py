@@ -64,6 +64,7 @@ if __name__ == '__main__':
     #                             resolution=resolution, channels=channels, scale=scale)
     # box_predictor = FastRCNNPredictor(in_channels=3, num_classes=None)
     model = FROD(shot=support_shot, representation_size=representation_size,
+                 roi_size=roi_size,
                  resolution=resolution,
                  channels=channels,
                  scale=scale,

@@ -30,13 +30,13 @@ class FRPredictor(nn.Module):
         super(FRPredictor, self).__init__()
         self.cls_score = nn.Linear(in_channels, num_classes)
         self.bbox_pred = nn.Linear(in_channels, num_classes * 4)
-        self.support = support
+        self.support = support  # 包含背景
         self.Woodubry = Woodubry
         self.catIds = catIds
         self.resolution = resolution
         self.channels = channels
         self.scale = scale
-        self.way = num_classes
+        self.way = num_classes - 1
         # α, β
         self.r = nn.Parameter(torch.zeros(2), requires_grad=True)
 
@@ -54,9 +54,10 @@ class FRPredictor(nn.Module):
             assert list(x.shape[2:]) == [1, 1]
         x = x.flatten(start_dim=1)
         # query_features: (roi数, channel, s, s)
-        scores = self.cls_predictor(support=self.support,
-                                    boxes_features=query_features,
-                                    Woodubry=self.Woodubry)
+        scores = self.cls_predictor(
+            support=self.support,
+            boxes_features=query_features,
+            Woodubry=self.Woodubry)
         bbox_deltas = self.bbox_pred(x)
 
         return scores, bbox_deltas
@@ -73,16 +74,19 @@ class FRPredictor(nn.Module):
         # resize特征
         # (roi数, channel, s, s) -> (roi数, s, s, channel) -> (roi数 * 分辨率, channel)
         n = boxes_features.shape[0]
-        boxes_features = boxes_features. \
-            permute(0, 2, 3, 1). \
-            contiguous(). \
-            view(n * self.resolution, self.channels)  # (shot * resolution, channel)
+        # boxes_features = boxes_features. \
+        #     permute(0, 2, 3, 1). \
+        #     contiguous(). \
+        #     view(n * self.resolution, self.channels)  # (shot * resolution, channel)
+        boxes_features = boxes_features.permute(0, 2, 3, 1)
+        boxes_features = boxes_features.contiguous()
+        boxes_features = boxes_features.view(n * self.resolution, self.channels)  # (shot * resolution, channel)
         Q_bar = self.reconstruct_feature_map(support, boxes_features, Woodubry)
-        euclidean_matrix = self.euclidean_metric(boxes_features, Q_bar)  # [roi数 * resolution, way]
+        euclidean_matrix = self.euclidean_metric(boxes_features, Q_bar)  # [roi数 * resolution, way + 1]
         metric_matrix = self.metric(euclidean_matrix,
                                     box_per_image=n,
-                                    resolution=self.resolution)  # (roi数, way)
-        logits = metric_matrix * self.scale  # (roi数, way)
+                                    resolution=self.resolution)  # (roi数, way + 1)
+        logits = metric_matrix * self.scale  # (roi数, way + 1)
         return logits
 
     def reconstruct_feature_map(self, support: torch.Tensor, query: torch.Tensor, Woodubry=True):
@@ -120,9 +124,9 @@ class FRPredictor(nn.Module):
             # https://ether-bucket-nj.oss-cn-nanjing.aliyuncs.com/img/image-20220831103223203.png
             # ScT * Sc
             st_s = support_t.matmul(support)  # (way, channel, channel)
-            m_inv = st_s + torch.eye(st_s.size(-1)).to(st_s.device).unsqueeze(0)
+            m_inv = torch.eye(st_s.size(-1)).to(st_s.device).unsqueeze(0)
             m_inv = m_inv.mul(lam)
-            m_inv = m_inv.inverse()
+            m_inv = (m_inv + st_s).inverse()
             # m_inv_1 = (st_s + torch.eye(st_s.size(-1)).to(st_s.device).unsqueeze(0).
             #            mul(lam)).inverse()  # (way, channel, channel)
             hat = m_inv.matmul(st_s)
@@ -156,7 +160,14 @@ class FRPredictor(nn.Module):
         #                                       [way * shot, roi数 * resolution]
         # x.permute(1,0)将x的第0个维度和第一个维度互换了
         #                                       [roi数 * resolution, way * shot]
-        euclidean_matrix = (Q_bar - query.unsqueeze(0)).pow(2).sum(2).permute(1, 0)  # [roi数 * resolution, way]
+        # euclidean_matrix = (Q_bar - query.unsqueeze(0)).pow(2).sum(2).permute(1, 0)  # [roi数 * resolution, way]
+        # query:                                [roi数 * resolution, channel]
+        # query.unsqueeze(0):                   [1, roi数 * resolution, channel]
+        # Q_bar:                                [way, roi数 * resolution, channel]
+        euclidean_matrix = Q_bar - query.unsqueeze(0)  # [way + 1(背景), roi数 * resolution, channel]
+        euclidean_matrix = euclidean_matrix.pow(2)  # [way + 1(背景), roi数 * resolution, channel]
+        euclidean_matrix = euclidean_matrix.sum(2)  # [way + 1(背景), roi数 * resolution]
+        euclidean_matrix = euclidean_matrix.permute(1, 0)  # [roi数 * resolution, way + 1(背景)]
         return euclidean_matrix  # 距离矩阵
 
     def metric(self, euclidean_matrix, box_per_image, resolution):
@@ -177,9 +188,11 @@ class FRPredictor(nn.Module):
         #     contiguous(). \
         #     view(box_per_image, resolution, self.way) \
         #     .mean(1)  # (roi数, way)
-        metric_matrix = euclidean_matrix
-        metric_matrix = metric_matrix.neg()
-        metric_matrix = metric_matrix.contiguous()
-        metric_matrix = metric_matrix.view(box_per_image, resolution, self.way)
-        metric_matrix = metric_matrix.mean(1)  # (roi数, way)
+        s = nn.Softmax(dim=1)
+        # euclidean_matrix: [roi数 * resolution, way]
+        metric_matrix = euclidean_matrix.neg() # [roi数 * resolution, way + 1(背景)]
+        metric_matrix = metric_matrix.contiguous() # [roi数 * resolution, way + 1(背景)]
+        metric_matrix = metric_matrix.view(box_per_image, resolution, self.way + 1)  # 包括了背景了, [roi数, resolution, way + 1(背景)]
+        metric_matrix = metric_matrix.mean(1)  # (roi数, way + 1(背景))
+        metric_matrix = s(metric_matrix)
         return metric_matrix

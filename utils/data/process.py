@@ -24,11 +24,15 @@ def pre_process(support: list, query: list, query_anns: list, val: list, val_ann
     :param support_n:
     :return: 如果有s_n, 则返回s_c, s_n, q_c, gt_bboxes, labels, 否则返回s_c, q_c, gt_bboxes, labels
     """
-    s_c_list = [transform_support(s, support_transforms, is_cuda) for s in support]
+    s_c_list = [transform_support(s, support_transforms, is_cuda) for s in support]  # [way * shot, channels, s, s)]
+    bg = [get_bg(s, support_transforms, is_cuda) for s in support]  # [way * (shot, channels, s, s)]
+    bg_t = torch.stack(bg)
+    bg_t = bg_t.mean(1)
+    s_c_list.insert(0, bg_t)
     q_c_list = [transform_query(q, query_transforms, is_cuda) for q in query]
-    q_anns_list = [transform_anns(query_anns[i], is_cuda, i) for i in range(len(query_anns))]
+    q_anns_list = [transform_anns(query_anns[i], is_cuda, i + 1) for i in range(len(query_anns))]
     val_list = [transform_query(v, query_transforms, is_cuda) for v in val]
-    val_anns_list = [transform_anns(val_anns[i], is_cuda, i) for i in range(len(val_anns))]
+    val_anns_list = [transform_anns(val_anns[i], is_cuda, i + 1) for i in range(len(val_anns))]
     return s_c_list, q_c_list, q_anns_list, val_list, val_anns_list
 
 
@@ -73,6 +77,20 @@ def transform_support(support_and_ann, transforms, is_cuda):
     if is_cuda:
         support_tensor = support_tensor.cuda()
     return support_tensor
+
+
+def get_bg(support_and_ann, support_transforms, is_cuda):
+    bg_tensors = []
+    t = support_transforms
+    for imgPath, box in support_and_ann:
+        img = PIL.Image.open(imgPath).convert('RGB')
+        img = t(img)
+        bg_tensors.append(img)
+    bg_tensor = torch.stack(bg_tensors, dim=0)
+    if is_cuda:
+        bg_tensor = bg_tensor.cuda()
+
+    return bg_tensor
 
 
 def transform_query(query, transforms, is_cuda):
@@ -146,7 +164,7 @@ def label2dict(detection, val_anns_ori_single, label_list):
             h = y2 - y1
             box = [x1, y1, w, h]
             res.append({'image_id': val_anns_ori_single[0][0]['image_id'], 'bbox': box, 'score': scores[j],
-                        'category_id': label_list[labels[j]]})
+                        'category_id': label_list[labels[j] - 1]})
             # img_res = []
             # if not len(i['scores'] == 0):
             #     i['scores']
