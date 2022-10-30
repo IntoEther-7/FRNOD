@@ -178,11 +178,11 @@ class ResNet(nn.Module):
         self.inplanes = 3
         self.layer1 = self._make_layer(block, n_blocks[0], 64,
                                        stride=2, drop_rate=drop_rate)
-        self.layer2 = self._make_layer(block, n_blocks[1], 160,
+        self.layer2 = self._make_layer(block, n_blocks[1], 64,
                                        stride=2, drop_rate=drop_rate)
-        self.layer3 = self._make_layer(block, n_blocks[2], 320,
+        self.layer3 = self._make_layer(block, n_blocks[2], 128,
                                        stride=2, drop_rate=drop_rate, drop_block=True, block_size=dropblock_size)
-        self.layer4 = self._make_layer(block, n_blocks[3], 640,
+        self.layer4 = self._make_layer(block, n_blocks[3], 128,
                                        stride=2, drop_rate=drop_rate, drop_block=True, block_size=dropblock_size,
                                        max_pool=max_pool)
 

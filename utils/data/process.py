@@ -11,8 +11,7 @@ from torchvision.transforms import transforms
 def pre_process(support: list, query: list, query_anns: list, val: list, val_anns: list,
                 support_transforms=transforms.Compose([transforms.ToTensor(),
                                                        transforms.Resize((320, 320))]),
-                query_transforms=transforms.Compose([transforms.ToTensor(),
-                                                     transforms.Resize(600)]), is_cuda=False):
+                query_transforms=transforms.Compose([transforms.ToTensor()]), is_cuda=False):
     r"""
     图像处理, 转换成tensor, s_c, s_n为tensor[shot, channel, 320, 320], q_c为[tensor, tensor, ...],
     gt_bboxes为[标注列表[每张图像的标注[每个盒子的参数]]],

@@ -22,6 +22,8 @@ from models.change.box_head import FRTwoMLPHead
 from utils.data.dataset import FsodDataset
 from utils.data.process import pre_process_tri, label2dict, pre_process
 from pycocotools.cocoeval import COCOeval
+from fastprogress.fastprogress import master_bar, progress_bar
+from time import sleep
 
 if __name__ == '__main__':
     random.seed(114514)
@@ -37,18 +39,19 @@ if __name__ == '__main__':
     positive_fraction = 0.5
     channels = 64
     rpn_positive_fraction = 0.7
-    rpn_pre_nms_top_n = {'training': 12000, 'testing': 12000}
-    rpn_post_nms_top_n = {'training': 2000, 'testing': 2000}
-    roi_size = (5, 5)
+    # rpn_pre_nms_top_n = {'training': 12000, 'testing': 12000}
+    # rpn_post_nms_top_n = {'training': 2000, 'testing': 2000}
+    rpn_pre_nms_top_n = {'training': 6000, 'testing': 6000}
+    rpn_post_nms_top_n = {'training': 200, 'testing': 200}
+    roi_size = (7, 7)
     support_size = (roi_size[0] * 16, roi_size[1] * 16)
     resolution = roi_size[0] * roi_size[1]
     nms_thresh = 0.7
-    detections_per_img = 30
     scale = 1.
     representation_size = 1024
 
     backbone = BackBone(num_channel=channels)
-    anchor_generator = AnchorGenerator(sizes=((32, 64, 128, 256, 512),), aspect_ratios=((0.25, 0.5, 1.0, 2.0, 4.0),))
+    anchor_generator = AnchorGenerator(sizes=((64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
     roi_pooler = MultiScaleRoIAlign(['0'], output_size=roi_size, sampling_ratio=2)
     root = 'datasets/fsod'
     train_json = 'datasets/fsod/annotations/fsod_train.json'
@@ -89,14 +92,14 @@ if __name__ == '__main__':
                  box_predictor=None,
                  box_score_thresh=0.05,
                  box_nms_thresh=0.5,
-                 box_detections_per_img=100,
+                 box_detections_per_img=100,  # coco要求
                  box_fg_iou_thresh=0.5,
                  box_bg_iou_thresh=0.5,
-                 box_batch_size_per_image=512,
+                 box_batch_size_per_image=64,
                  box_positive_fraction=0.25,
                  bbox_reg_weights=None)
 
-    weight = torch.load('weights/frnod159.pth')
+    weight = torch.load('weights/frnod4_160.pth')
     model.load_state_dict(state_dict=weight['models'])
 
     if is_cuda:
@@ -108,11 +111,11 @@ if __name__ == '__main__':
     cat_list = [i for i in range(1, 801)]
     random.shuffle(cat_list)
     num_epoch = len(cat_list) // way
-    fine_epoch = int(num_epoch * 0.7)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.02, momentum=0.9)
+    # fine_epoch = int(num_epoch * 0.7)
+    # optimizer = torch.optim.SGD(model.parameters(), lr=0.02, momentum=0.9)
     for i in range(num_epoch):
-        if i == fine_epoch:
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.002, momentum=0.9)
+        # if i == fine_epoch:
+        #     optimizer = torch.optim.SGD(model.parameters(), lr=0.002, momentum=0.9)
         print('--------------------epoch: {} / {}--------------------'.format(i + 1, len(cat_list) // way))
         print('load data----------------')
         catIds = cat_list[i * way:(i + 1) * way]

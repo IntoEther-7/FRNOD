@@ -8,14 +8,26 @@ from matplotlib import pyplot as plt
 
 loss_list = []
 loss_avg_list = []
-with open('weights/loss.json', 'r') as f:
-    d = json.load(f)
-    loss_list = d['loss_list']
-    loss_avg_list = d['loss_avg_list']
+loss_bepoch = []
+for i in range(1, 5):
+    with open('weights/results/loss_bepoch{}.json'.format(i), 'r') as f:
+        d = json.load(f)
+        loss_list.extend(d['loss_list'])
+        loss_avg_list.extend(d['loss_avg_list'])
+        loss_bepoch.append(np.mean(d['loss_avg_list']))
 
 ll = np.array(loss_list)
 lal = np.array(loss_avg_list)
+lbe = np.array(loss_bepoch)
+
+plt.figure()
+plt.plot(ll)
+plt.show()
 
 plt.figure()
 plt.plot(lal)
+plt.show()
+
+plt.figure()
+plt.plot(lbe)
 plt.show()
