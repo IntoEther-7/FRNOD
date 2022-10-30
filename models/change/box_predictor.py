@@ -4,6 +4,7 @@
 # TIME: 2022-10-22 18:06
 import torch
 from torch import nn
+from torchvision.transforms import transforms
 
 
 class FRPredictor(nn.Module):
@@ -186,13 +187,15 @@ class FRPredictor(nn.Module):
         # metric_matrix_1 = euclidean_matrix. \
         #     neg(). \
         #     contiguous(). \
-        #     view(box_per_image, resolution, self.way) \
+        #     view(box_per_image, resolution, self.way) \缩放到-1到1
         #     .mean(1)  # (roi数, way)
-        s = nn.Softmax(dim=1)
         # euclidean_matrix: [roi数 * resolution, way]
-        metric_matrix = euclidean_matrix.neg() # [roi数 * resolution, way + 1(背景)]
-        metric_matrix = metric_matrix.contiguous() # [roi数 * resolution, way + 1(背景)]
-        metric_matrix = metric_matrix.view(box_per_image, resolution, self.way + 1)  # 包括了背景了, [roi数, resolution, way + 1(背景)]
+        metric_matrix = euclidean_matrix.neg()  # [roi数 * resolution, way + 1(背景)]
+        metric_matrix = metric_matrix.contiguous()  # [roi数 * resolution, way + 1(背景)]
+        metric_matrix = metric_matrix.view(box_per_image, resolution,
+                                           self.way + 1)  # 包括了背景了, [roi数, resolution, way + 1(背景)]
         metric_matrix = metric_matrix.mean(1)  # (roi数, way + 1(背景))
-        metric_matrix = s(metric_matrix)
+        k = 2 / (metric_matrix.max(1).values - metric_matrix.min(1).values)
+        b = 1 - metric_matrix.max(1).values * k
+        metric_matrix = metric_matrix * k.unsqueeze(1) + b.unsqueeze(1)
         return metric_matrix
