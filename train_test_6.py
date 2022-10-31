@@ -49,7 +49,7 @@ if __name__ == '__main__':
     # 骨干网络
     backbone = BackBone(channels)
     # 支持分支
-    support_branch = SupportBranch(backbone)
+    support_branch = SupportBranch(backbone,,
     # 查询分支
     t = transform.GeneralizedRCNNTransform(min_size=600, max_size=800,
                                            image_mean=[0.48898794, 0.45319346, 0.40628443],

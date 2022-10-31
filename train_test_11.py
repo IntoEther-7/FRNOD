@@ -114,7 +114,10 @@ if __name__ == '__main__':
     epoch = 10
     fine_epoch = int(epoch * 0.7)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.002, momentum=0.9, weight_decay=0.0001)
-    all_loss_avg_list = []
+
+    with open('weights/results/loss_per_image.json', 'w') as f:
+        json.dump({}, f)
+        print('创建loss_per_image.json')
 
     # ----------------------------------------------------------------------------------------
     # weight = torch.load('weights/frnod1_70.pth')
@@ -152,15 +155,18 @@ if __name__ == '__main__':
             model.train()
             print('train--------------------')
             loss_list_tmp = []
-            for c_index in range(len(q_c_list)):
+            pbar = tqdm(range(len(q_c_list)))
+            for c_index in pbar:
                 qs = q_c_list[c_index]
                 qs_anns = q_anns_list[c_index]
-                for index in tqdm(range(len(qs)), desc='第{} / {}个类别'.format(c_index + 1, len(q_c_list))):
+                # pbar = tqdm(range(len(qs)), desc='第{} / {}个类别'.format(c_index + 1, len(q_c_list)))
+                for index in range(len(qs)):
                     q = qs[index]
                     target = qs_anns[index]
                     result = model.forward(s_c_list, query_images=[q], targets=[target])
                     loss = result['loss_classifier'] + result['loss_box_reg'] \
                            + result['loss_objectness'] + result['loss_rpn_box_reg']
+                    pbar.set_postfix({'进度': '{:0>3d}/{:0>3d}'.format(index + 1, len(qs)), '损失': "%.6f" % float(loss)})
                     if torch.isnan(loss).any():
                         print('梯度炸了!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
                         sys.exit(0)
@@ -172,26 +178,36 @@ if __name__ == '__main__':
                     if (i + 1) % 10 == 0:
                         torch.save({'models': model.state_dict()}, 'weights/frnod{}_{}.pth'.format(e + 1, i + 1))
 
+            print('将本次任务的loss写入json')
+            with open('weights/results/loss_per_image.json', 'r') as f:
+                content = json.load(f)
+            with open('weights/results/loss_per_image.json', 'w') as f:
+                content.update({'loss_epoch{}_mission_{}'.format(e + 1, i + 1): loss_list_tmp})
+                json.dump(content, f)
+
             loss_avg = float(torch.Tensor(loss_list_tmp).mean(0))
             loss_avg_list.append(loss_avg)
             print('loss_avg:', loss_avg)
-            all_loss_avg_list.extend(loss_avg_list)
 
             # 验证----------------------------------------------
             print('validation---------------')
 
             loss_list_tmp = []
-            for c_index in range(len(val_list)):
+            pbar = tqdm(range(len(val_list)))
+            for c_index in pbar:
                 vals = val_list[c_index]
                 vals_anns = val_anns_list[c_index]
                 vals_anns_ori = val_anns_list_ori[c_index]
-                for index in tqdm(range(len(vals)), desc='第{} / {}个类别'.format(c_index + 1, len(val_list))):
+                # pbar = tqdm(range(len(vals)), desc='第{} / {}个类别'.format(c_index + 1, len(val_list)))
+                for index in range(len(vals)):
                     v = vals[index]
                     target = vals_anns[index]
                     target_ori = vals_anns_ori[index]
                     result = model.forward(s_c_list, query_images=[v], targets=[target])
                     loss = result['loss_classifier'] + result['loss_box_reg'] \
                            + result['loss_objectness'] + result['loss_rpn_box_reg']
+                    pbar.set_postfix({'进度': '{:0>3d}/{:0>3d}'.format(index + 1, len(qs)), '损失': "%.6f" % float(loss)})
+                    # pbar.set_postfix_str("loss: %.6f" % float(loss))
                     if torch.isnan(loss).any():
                         print('梯度炸了!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
                         sys.exit(0)
@@ -206,6 +222,3 @@ if __name__ == '__main__':
 
         with open('weights/results/loss_bepoch{}.json'.format(e + 1), 'w') as f:
             json.dump({'loss_avg_list': loss_avg_list, 'val_loss_avg_list': val_loss_avg_list}, f)
-
-    with open('weights/results/loss_all.json', 'w') as f:
-        json.dump({'loss_avg_list': all_loss_avg_list}, f)

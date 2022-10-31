@@ -44,12 +44,11 @@ class FROD(nn.Module):
 
         self.backbone = backbone
         # representation_size,support,resolution,channels,scale
-        self.support_branch = SupportBranch(backbone,
-                                            shot=self.shot,
-                                            channels=self.channels,
-                                            resolution=self.resolution)
+        self.support_branch = SupportBranch(backbone, shot=self.shot, channels=self.channels,
+                                            resolution=self.resolution, image_mean=image_mean, image_std=image_std)
         self.box_head = FRTwoMLPHead(in_channels=channels * resolution, representation_size=representation_size)
-        self.box_predictor = FRPredictor(f_channels=representation_size, q_channels=self.channels, num_classes=num_classes, support=None,
+        self.box_predictor = FRPredictor(f_channels=representation_size, q_channels=self.channels,
+                                         num_classes=num_classes, support=None,
                                          catIds=[1, 2], Woodubry=True, resolution=resolution, channels=channels,
                                          scale=scale)
         self.fast_rcnn = FasterRCNN(backbone, None,
@@ -83,7 +82,7 @@ class FROD(nn.Module):
         :param targets:
         :return:
         """
-        way = len(support_list)
+
         s = self.support_branch(support_list)  # (way + 1, channel, s, s)
 
         self.box_predictor.support = s

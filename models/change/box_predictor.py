@@ -30,14 +30,15 @@ class FRPredictor(nn.Module):
         """
 
         super(FRPredictor, self).__init__()
-        self.cls_conv = nn.Conv2d(q_channels, q_channels, kernel_size=1)
+        self.cls_conv = nn.Sequential(nn.Conv2d(q_channels, q_channels, kernel_size=1),
+                                      nn.BatchNorm2d(q_channels))
         self.bbox_pred = nn.Linear(f_channels, num_classes * 4)
         self.support = support  # 包含背景
         self.Woodubry = Woodubry
         self.catIds = catIds
         self.resolution = resolution
         self.channels = channels
-        self.scale = scale
+        self.scale = nn.Parameter(torch.FloatTensor([1.0]), requires_grad=True)
         self.way = num_classes - 1
         # α, β
         self.r = nn.Parameter(torch.zeros(2), requires_grad=True)
@@ -202,7 +203,7 @@ class FRPredictor(nn.Module):
         metric_matrix = metric_matrix.view(box_per_image, resolution,
                                            self.way + 1)  # 包括了背景了, [roi数, resolution, way + 1(背景)]
         metric_matrix = metric_matrix.mean(1)  # (roi数, way + 1(背景))
-        metric_matrix = F.normalize(metric_matrix, p=1, dim=1) + 2 / (self.way + 1)  # [-1,0] -> [0-1]
+        metric_matrix += 2 / (self.way + 1)  # [-1,0] -> [0-1]
         # k = 2 / (metric_matrix.max(1).values - metric_matrix.min(1).values)
         # b = 1 - metric_matrix.max(1).values * k
         # metric_matrix = metric_matrix * k.unsqueeze(1) + b.unsqueeze(1)
