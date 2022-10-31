@@ -9,10 +9,10 @@ from matplotlib import pyplot as plt
 loss_list = []
 loss_avg_list = []
 loss_bepoch = []
-for i in range(1, 5):
+for i in range(1, 2):
     with open('weights/results/loss_bepoch{}.json'.format(i), 'r') as f:
         d = json.load(f)
-        loss_list.extend(d['loss_list'])
+        # loss_list.extend(d['loss_list'])
         loss_avg_list.extend(d['loss_avg_list'])
         loss_bepoch.append(np.mean(d['loss_avg_list']))
 

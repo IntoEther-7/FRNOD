@@ -17,7 +17,7 @@ from utils.dataset_tools.support_query_constructor import one_way_k_shot
 class FsodDataset(Dataset):
     def __init__(self, root, annFile, way=None, support_shot=2, val_shot=None, img_transform=None,
                  target_transform=None,
-                 seed=None, init=True):
+                 seed=None, init=True, quick_test=False):
         super(FsodDataset, self).__init__()
         self.num_mission = None
         self.mission = None
@@ -29,6 +29,7 @@ class FsodDataset(Dataset):
         self.target_transform = target_transform
         self.support_shot = support_shot
         self.val_shot = val_shot
+        self.quick_test = quick_test
         if seed:
             random.seed(seed)
 
@@ -43,7 +44,7 @@ class FsodDataset(Dataset):
             for catId, cat in tqdm(self.coco.cats.items()):
                 support, query, query_anns, val, val_anns = one_way_k_shot(root=self.root, dataset=self.coco,
                                                                            catId=catId,
-                                                                           support_shot=self.support_shot)
+                                                                           support_shot=self.support_shot, quick_test=self.quick_test)
                 self.support_list.append(support)
                 self.query_list.append(query)
                 self.query_anns_list.append(query_anns)

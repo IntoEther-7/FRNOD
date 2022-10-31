@@ -49,7 +49,7 @@ class FROD(nn.Module):
                                             channels=self.channels,
                                             resolution=self.resolution)
         self.box_head = FRTwoMLPHead(in_channels=channels * resolution, representation_size=representation_size)
-        self.box_predictor = FRPredictor(in_channels=representation_size, num_classes=num_classes, support=None,
+        self.box_predictor = FRPredictor(f_channels=representation_size, q_channels=self.channels, num_classes=num_classes, support=None,
                                          catIds=[1, 2], Woodubry=True, resolution=resolution, channels=channels,
                                          scale=scale)
         self.fast_rcnn = FasterRCNN(backbone, None,
@@ -71,7 +71,7 @@ class FROD(nn.Module):
                                     box_batch_size_per_image, box_positive_fraction,
                                     bbox_reg_weights)
         self.FRTwoMLPHead = FRTwoMLPHead(in_channels=channels * resolution, representation_size=representation_size)
-        # self.FRPredictor = FRPredictor(in_channels=representation_size, num_classes=num_classes,
+        # self.FRPredictor = FRPredictor(f_channels=representation_size, num_classes=num_classes,
         #                                support=None, catIds=[1, 2], Woodubry=False,
         #                                resolution=resolution, channels=channels, scale=scale)
 
@@ -86,8 +86,7 @@ class FROD(nn.Module):
         way = len(support_list)
         s = self.support_branch(support_list)  # (way + 1, channel, s, s)
 
-        self.box_predictor.support = s.view(way, self.channels, self.resolution).permute(0, 2, 1)
-        # (way + 1, resolution, channel)
+        self.box_predictor.support = s
         self.fast_rcnn.rpn.s = s
         result = self.fast_rcnn.forward(query_images, targets)
         return result

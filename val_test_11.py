@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from models.FROD import FROD
 from models.backbone.Conv_4 import BackBone
-from models.backbone.ResNet import resnet12
+from models.backbone.ResNet import resnet18
 from models.change.box_predictor import FRPredictor
 from models.change.box_head import FRTwoMLPHead
 from utils.data.dataset import FsodDataset
@@ -29,28 +29,33 @@ if __name__ == '__main__':
     random.seed(114514)
     is_cuda = True
     way = 5
-    num_classes = 5
+    num_classes = 6
     support_shot = 5
     query_shot = 5
     # 超参
-    rpn_fg_iou_thresh = 0.5
-    rpn_bg_iou_thresh = 0.5
+    rpn_fg_iou_thresh = 0.7
+    rpn_bg_iou_thresh = 0.3
     batch_size_per_image = 256
     positive_fraction = 0.5
-    channels = 64
     rpn_positive_fraction = 0.7
-    # rpn_pre_nms_top_n = {'training': 12000, 'testing': 12000}
-    # rpn_post_nms_top_n = {'training': 2000, 'testing': 2000}
-    rpn_pre_nms_top_n = {'training': 6000, 'testing': 6000}
+    rpn_pre_nms_top_n = {'training': 2000, 'testing': 2000}
     rpn_post_nms_top_n = {'training': 200, 'testing': 200}
+    # rpn_pre_nms_top_n = {'training': 6000, 'testing': 6000}
+    # rpn_post_nms_top_n = {'training': 20, 'testing': 20}
     roi_size = (7, 7)
-    support_size = (roi_size[0] * 16, roi_size[1] * 16)
     resolution = roi_size[0] * roi_size[1]
-    nms_thresh = 0.7
+    rpn_nms_thresh = 0.7
     scale = 1.
     representation_size = 1024
 
-    backbone = BackBone(num_channel=channels)
+    # channels = 64
+    # channels = 256
+    channels = 512
+    # backbone = BackBone(num_channel=channels)
+    backbone = resnet18(pretrained=True, progress=True, frozen=True)
+    # support_size = (roi_size[0] * 16, roi_size[1] * 16)
+    support_size = (roi_size[0] * 32, roi_size[1] * 32)
+
     anchor_generator = AnchorGenerator(sizes=((64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
     roi_pooler = MultiScaleRoIAlign(['0'], output_size=roi_size, sampling_ratio=2)
     root = 'datasets/fsod'
@@ -60,17 +65,17 @@ if __name__ == '__main__':
 
     # support = torch.randn([num_classes, channels, roi_size[0], roi_size[1]])
     # support = torch.randn([num_classes, resolution, channels])
-    # box_head = FRTwoMLPHead(in_channels=channels * resolution, representation_size=representation_size)
-    # box_predictor = FRPredictor(in_channels=representation_size, num_classes=num_classes,
+    # box_head = FRTwoMLPHead(f_channels=channels * resolution, representation_size=representation_size)
+    # box_predictor = FRPredictor(f_channels=representation_size, num_classes=num_classes,
     #                             support=support, catIds=[1, 2], Woodubry=True,
     #                             resolution=resolution, channels=channels, scale=scale)
-    # box_predictor = FastRCNNPredictor(in_channels=3, num_classes=None)
-    model = FROD(shot=support_shot, representation_size=representation_size,
+    # box_predictor = FastRCNNPredictor(f_channels=3, num_classes=None)
+    model = FROD(shot=support_shot, representation_size=representation_size, roi_size=roi_size,
                  resolution=resolution,
                  channels=channels,
                  scale=scale,
                  backbone=backbone,
-                 num_classes=way,
+                 num_classes=num_classes,
                  min_size=600,
                  max_size=1000,
                  image_mean=[0.48898793804461593, 0.45319346269085636, 0.40628443137676473],
@@ -81,7 +86,7 @@ if __name__ == '__main__':
                  rpn_pre_nms_top_n_test=rpn_pre_nms_top_n['testing'],
                  rpn_post_nms_top_n_train=rpn_post_nms_top_n['training'],
                  rpn_post_nms_top_n_test=rpn_post_nms_top_n['testing'],
-                 rpn_nms_thresh=nms_thresh,
+                 rpn_nms_thresh=rpn_nms_thresh,
                  rpn_fg_iou_thresh=rpn_fg_iou_thresh,
                  rpn_bg_iou_thresh=rpn_bg_iou_thresh,
                  rpn_batch_size_per_image=batch_size_per_image,
@@ -91,29 +96,32 @@ if __name__ == '__main__':
                  box_head=None,
                  box_predictor=None,
                  box_score_thresh=0.05,
-                 box_nms_thresh=0.5,
+                 box_nms_thresh=0.7,
                  box_detections_per_img=100,  # coco要求
-                 box_fg_iou_thresh=0.5,
-                 box_bg_iou_thresh=0.5,
-                 box_batch_size_per_image=100,
+                 box_fg_iou_thresh=0.7,
+                 box_bg_iou_thresh=0.3,
+                 box_batch_size_per_image=128,
                  box_positive_fraction=0.25,
-                 bbox_reg_weights=None)
-
-    weight = torch.load('weights/frnod4_160.pth')
-    model.load_state_dict(state_dict=weight['models'])
+                 bbox_reg_weights=(10., 10., 5., 5.))
 
     if is_cuda:
         model.cuda()
+
+    # ----------------------------------------------------------------------------------------
+    weight = torch.load('weights/frnod1_10.pth')
+    model.load_state_dict(weight['models'])
+    # ----------------------------------------------------------------------------------------
+
 
     loss_list = []
     loss_avg_list = []
     eval_results = []
     cat_list = [i for i in range(1, 801)]
     random.shuffle(cat_list)
-    num_epoch = len(cat_list) // way
-    # fine_epoch = int(num_epoch * 0.7)
+    mission = len(cat_list) // way
+    # fine_epoch = int(num_mission * 0.7)
     # optimizer = torch.optim.SGD(model.parameters(), lr=0.02, momentum=0.9)
-    for i in range(num_epoch):
+    for i in range(mission):
         # if i == fine_epoch:
         #     optimizer = torch.optim.SGD(model.parameters(), lr=0.002, momentum=0.9)
         print('--------------------epoch: {} / {}--------------------'.format(i + 1, len(cat_list) // way))

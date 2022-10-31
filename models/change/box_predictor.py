@@ -4,6 +4,7 @@
 # TIME: 2022-10-22 18:06
 import torch
 from torch import nn
+from torch.nn import functional as F
 from torchvision.transforms import transforms
 
 
@@ -13,24 +14,24 @@ class FRPredictor(nn.Module):
     for Fast R-CNN.
 
     Args:
-        in_channels (int): number of input channels
+        f_channels (int): number of input channels
         num_classes (int): number of output classes (including background)
     """
 
-    def __init__(self, in_channels, num_classes,
+    def __init__(self, f_channels, q_channels, num_classes,
                  support, catIds, Woodubry,
                  resolution, channels, scale):
         r"""
 
-        :param in_channels:
+        :param f_channels:
         :param num_classes:
         :param support: support(way, s, s)
         :param Woodubry:
         """
 
         super(FRPredictor, self).__init__()
-        self.cls_score = nn.Linear(in_channels, num_classes)
-        self.bbox_pred = nn.Linear(in_channels, num_classes * 4)
+        self.cls_conv = nn.Conv2d(q_channels, q_channels, kernel_size=1)
+        self.bbox_pred = nn.Linear(f_channels, num_classes * 4)
         self.support = support  # 包含背景
         self.Woodubry = Woodubry
         self.catIds = catIds
@@ -54,9 +55,14 @@ class FRPredictor(nn.Module):
         if x.dim() == 4:
             assert list(x.shape[2:]) == [1, 1]
         x = x.flatten(start_dim=1)
+        support = self.support  # (way + 1, channel, s, s)
+        support = self.cls_conv(support)  # (way + 1, channel, s, s)
+        support = support.view(self.way + 1, self.channels, self.resolution)  # (way + 1, channel, resolution)
+        support = support.permute(0, 2, 1)  # (way + 1, resolution, channel)
+        query_features = self.cls_conv(query_features)
         # query_features: (roi数, channel, s, s)
         scores = self.cls_predictor(
-            support=self.support,
+            support=support,
             boxes_features=query_features,
             Woodubry=self.Woodubry)
         bbox_deltas = self.bbox_pred(x)
@@ -120,7 +126,7 @@ class FRPredictor(nn.Module):
         # 但是，如果特征图很大或镜头数特别高（kr > d），则方程式。
         # 8 可能很快变得无法计算。在这种情况下，Qexists 的替代公式，根据计算要求将 d 替换为 kr。
         if Woodubry:
-            # channel <kr 建议使用eq10
+            # channel < kr 建议使用eq10
             # FRN论文, 公式10
             # https://ether-bucket-nj.oss-cn-nanjing.aliyuncs.com/img/image-20220831103223203.png
             # ScT * Sc
@@ -166,9 +172,10 @@ class FRPredictor(nn.Module):
         # query.unsqueeze(0):                   [1, roi数 * resolution, channel]
         # Q_bar:                                [way, roi数 * resolution, channel]
         euclidean_matrix = Q_bar - query.unsqueeze(0)  # [way + 1(背景), roi数 * resolution, channel]
-        euclidean_matrix = euclidean_matrix.pow(2)  # [way + 1(背景), roi数 * resolution, channel]
+        euclidean_matrix = euclidean_matrix.pow(2)  # [way + 1(背景), roi数 * resolution, channel], 距离不需要负值
         euclidean_matrix = euclidean_matrix.sum(2)  # [way + 1(背景), roi数 * resolution]
         euclidean_matrix = euclidean_matrix.permute(1, 0)  # [roi数 * resolution, way + 1(背景)]
+        euclidean_matrix = F.normalize(euclidean_matrix, p=1, dim=1)
         return euclidean_matrix  # 距离矩阵
 
     def metric(self, euclidean_matrix, box_per_image, resolution):
@@ -195,7 +202,8 @@ class FRPredictor(nn.Module):
         metric_matrix = metric_matrix.view(box_per_image, resolution,
                                            self.way + 1)  # 包括了背景了, [roi数, resolution, way + 1(背景)]
         metric_matrix = metric_matrix.mean(1)  # (roi数, way + 1(背景))
-        k = 2 / (metric_matrix.max(1).values - metric_matrix.min(1).values)
-        b = 1 - metric_matrix.max(1).values * k
-        metric_matrix = metric_matrix * k.unsqueeze(1) + b.unsqueeze(1)
+        metric_matrix = F.normalize(metric_matrix, p=1, dim=1) + 2 / (self.way + 1)  # [-1,0] -> [0-1]
+        # k = 2 / (metric_matrix.max(1).values - metric_matrix.min(1).values)
+        # b = 1 - metric_matrix.max(1).values * k
+        # metric_matrix = metric_matrix * k.unsqueeze(1) + b.unsqueeze(1)
         return metric_matrix

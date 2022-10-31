@@ -27,7 +27,7 @@ if __name__ == '__main__':
     random.seed(114514)
     is_cuda = True
     way = 5
-    num_classes = 5
+    num_classes = 6
     support_shot = 5
     query_shot = 5
     # 超参
@@ -36,11 +36,12 @@ if __name__ == '__main__':
     batch_size_per_image = 256
     positive_fraction = 0.5
     channels = 64
+    # channels = 256
     rpn_positive_fraction = 0.7
-    # rpn_pre_nms_top_n = {'training': 12000, 'testing': 12000}
-    # rpn_post_nms_top_n = {'training': 2000, 'testing': 2000}
-    rpn_pre_nms_top_n = {'training': 6000, 'testing': 6000}
-    rpn_post_nms_top_n = {'training': 200, 'testing': 200}
+    rpn_pre_nms_top_n = {'training': 12000, 'testing': 12000}
+    rpn_post_nms_top_n = {'training': 2000, 'testing': 2000}
+    # rpn_pre_nms_top_n = {'training': 6000, 'testing': 6000}
+    # rpn_post_nms_top_n = {'training': 20, 'testing': 20}
     roi_size = (7, 7)
     support_size = (roi_size[0] * 16, roi_size[1] * 16)
     resolution = roi_size[0] * roi_size[1]
@@ -49,6 +50,7 @@ if __name__ == '__main__':
     representation_size = 1024
 
     backbone = BackBone(num_channel=channels)
+    # backbone = resnet12(out_channels=channels, drop_rate=0.3)
     anchor_generator = AnchorGenerator(sizes=((64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
     roi_pooler = MultiScaleRoIAlign(['0'], output_size=roi_size, sampling_ratio=2)
     root = 'datasets/fsod'
@@ -58,18 +60,17 @@ if __name__ == '__main__':
 
     # support = torch.randn([num_classes, channels, roi_size[0], roi_size[1]])
     # support = torch.randn([num_classes, resolution, channels])
-    # box_head = FRTwoMLPHead(in_channels=channels * resolution, representation_size=representation_size)
-    # box_predictor = FRPredictor(in_channels=representation_size, num_classes=num_classes,
+    # box_head = FRTwoMLPHead(f_channels=channels * resolution, representation_size=representation_size)
+    # box_predictor = FRPredictor(f_channels=representation_size, num_classes=num_classes,
     #                             support=support, catIds=[1, 2], Woodubry=True,
     #                             resolution=resolution, channels=channels, scale=scale)
-    # box_predictor = FastRCNNPredictor(in_channels=3, num_classes=None)
-    model = FROD(shot=support_shot, representation_size=representation_size,
-                 roi_size=roi_size,
+    # box_predictor = FastRCNNPredictor(f_channels=3, num_classes=None)
+    model = FROD(shot=support_shot, representation_size=representation_size, roi_size=roi_size,
                  resolution=resolution,
                  channels=channels,
                  scale=scale,
                  backbone=backbone,
-                 num_classes=way,
+                 num_classes=num_classes,
                  min_size=600,
                  max_size=1000,
                  image_mean=[0.48898793804461593, 0.45319346269085636, 0.40628443137676473],
@@ -94,7 +95,7 @@ if __name__ == '__main__':
                  box_detections_per_img=100,  # coco要求
                  box_fg_iou_thresh=0.5,
                  box_bg_iou_thresh=0.5,
-                 box_batch_size_per_image=64,
+                 box_batch_size_per_image=100,
                  box_positive_fraction=0.25,
                  bbox_reg_weights=None)
 
@@ -116,7 +117,7 @@ if __name__ == '__main__':
     # ----------------------------------------------------------------------------------------
 
     for e in range(4, 10):
-        print('----------------------------------big_epoch: {} / {}-----------------------------------'.format(e + 1,
+        print('----------------------------------epoch: {} / {}-----------------------------------'.format(e + 1,
                                                                                                                big_epoch))
         if e == fine_epoch:
             optimizer = torch.optim.SGD(model.parameters(), lr=0.0002, momentum=0.9)

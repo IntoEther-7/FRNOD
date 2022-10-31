@@ -24,7 +24,7 @@ from torchvision.transforms import transforms
 #     pass
 
 
-def one_way_k_shot(root, dataset: coco.COCO, catId: int, support_shot: int = 2):
+def one_way_k_shot(root, dataset: coco.COCO, catId: int, support_shot: int = 2, quick_test=False):
     r"""
     针对某一个种类, 生成k-shot的support和query-shot的query, 并返回support, query, query的标注
     :param dataset: 数据集
@@ -35,7 +35,7 @@ def one_way_k_shot(root, dataset: coco.COCO, catId: int, support_shot: int = 2):
     """
     support_annIds, query_imgIds, val_imgIds = k_shot(dataset=dataset,
                                                       catId=catId,
-                                                      support_shot=support_shot)
+                                                      support_shot=support_shot, quick_test=quick_test)
 
     support_and_ann = []
     for support_annId in support_annIds:
@@ -69,7 +69,7 @@ def one_way_k_shot(root, dataset: coco.COCO, catId: int, support_shot: int = 2):
     return support_and_ann, query, query_anns, val, val_anns
 
 
-def k_shot(dataset: coco.COCO, catId: int, support_shot: int = 2):
+def k_shot(dataset: coco.COCO, catId: int, support_shot: int = 2, quick_test=False):
     r"""
     对某一个类别, 生成支持集和查询集, 对于一类图像, 去除Support, query: val = 0.7: 0.3
     :param dataset: 利用cocoAPI生成的数据集
@@ -95,6 +95,9 @@ def k_shot(dataset: coco.COCO, catId: int, support_shot: int = 2):
     # 查询图像的ann
     query_annIDs = dataset.getAnnIds(imgIds=query_imgIds, catIds=[catId])
 
+    if quick_test:
+        query_imgIds = [query_imgIds[0]]
+        val_imgIds = [val_imgIds[0]]
     return support_annIds, query_imgIds, val_imgIds
 
 # if __name__ == '__main__':

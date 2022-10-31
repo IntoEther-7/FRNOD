@@ -1,248 +1,159 @@
-import torch.nn as nn
+# PROJECT: FRNOD
+# PRODUCT: PyCharm
+# AUTHOR: 17795
+# TIME: 2022-10-31 13:56
+from typing import Type, List, Union, Optional, Callable, Any
+
 import torch
-import torch.nn.functional as F
-from torch.distributions import Bernoulli
-
-
-# modified based on the following repos:
-# https://github.com/Sha-Lab/FEAT/blob/master/model/networks/res12.py
-# https://github.com/WangYueFt/rfs/blob/master/models/resnet.py
-# https://github.com/kjunelee/MetaOptNet/blob/master/models/ResNet12_embedding.py
-
-
-def conv3x3(in_planes, out_planes, stride=1):
-    """3x3 convolution with padding"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, bias=False)
-
-
-class DropBlock(nn.Module):
-    def __init__(self, block_size):
-        r"""
-        Drop Block
-        @param block_size: block的大小
-        """
-        # https://img-blog.csdnimg.cn/20181219175613737.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzE0ODQ1MTE5,size_16,color_FFFFFF,t_70
-        super(DropBlock, self).__init__()
-
-        self.block_size = block_size
-
-    def forward(self, x, gamma):
-        r"""
-        如果是训练, 进行drop block
-        @param x: 输入
-        @param gamma: drop的概率
-        @return: 经过drop block之后的图像
-        """
-        # shape: (bsize, channels, height, width)
-
-        if self.training:
-            batch_size, channels, height, width = x.shape
-
-            # 用伯努利分布进行采样
-            bernoulli = Bernoulli(gamma)
-            # 产生一个掩膜mask, 为一个矩阵
-            # shape为(batch_size, channels, height - (self.block_size - 1), width - (self.block_size - 1)), 内容非0即1
-            # 1代表该位置要drop一个block
-            mask = bernoulli.sample(
-                (batch_size, channels, height - (self.block_size - 1), width - (self.block_size - 1))).cuda()
-            block_mask = self._compute_block_mask(mask)
-            countM = block_mask.size()[0] * block_mask.size()[1] * block_mask.size()[2] * block_mask.size()[3]
-            count_ones = block_mask.sum()
-
-            return block_mask * x * (countM / count_ones)
-        else:
-            return x
-
-    def _compute_block_mask(self, mask):
-        r"""
-        计算block的mask, 并翻转0和1
-        @param mask: 一个mask矩阵, 非0即1, shape为
-        (batch_size, channels, height - (self.block_size - 1), width - (self.block_size - 1))
-        @return: 返回计算后的矩阵
-        """
-        # 取最大值,这样就能够取出一个block的块大小的1作为drop,当然需要翻转大小,使得1为0,0为1
-        left_padding = int((self.block_size - 1) / 2)
-        right_padding = int(self.block_size / 2)
-
-        batch_size, channels, height, width = mask.shape
-        # nonzero(), 获取非0元素的索引
-        non_zero_idxs = mask.nonzero()
-        # 非零元素个数
-        nr_blocks = non_zero_idxs.shape[0]
-
-        offsets = torch.stack(
-            [
-                torch.arange(self.block_size).view(-1, 1).expand(self.block_size, self.block_size).reshape(-1),
-                # - left_padding,
-                torch.arange(self.block_size).repeat(self.block_size),  # - left_padding
-            ]
-        ).t().cuda()
-        offsets = torch.cat((torch.zeros(self.block_size ** 2, 2).cuda().long(), offsets.long()), 1)
-
-        if nr_blocks > 0:
-            non_zero_idxs = non_zero_idxs.repeat(self.block_size ** 2, 1)
-            offsets = offsets.repeat(nr_blocks, 1).view(-1, 4)
-            offsets = offsets.long()
-
-            block_idxs = non_zero_idxs + offsets
-            padded_mask = F.pad(mask, (left_padding, right_padding, left_padding, right_padding))
-            padded_mask[block_idxs[:, 0], block_idxs[:, 1], block_idxs[:, 2], block_idxs[:, 3]] = 1.
-        else:
-            padded_mask = F.pad(mask, (left_padding, right_padding, left_padding, right_padding))
-
-        block_mask = 1 - padded_mask  # [:height, :width]
-        return block_mask
-
-
-class BasicBlock(nn.Module):
-    r"""
-    残差块
-    """
-    expansion = 1  # 膨胀率
-
-    def __init__(self, inplanes, planes, stride=1, downsample=None, drop_rate=0.0, drop_block=False,
-                 block_size=1, max_pool=True):
-        r"""
-        初始化一个残差块
-        @param inplanes: 输入通道数
-        @param planes: 输出通道数
-        @param stride: 步长
-        @param downsample: 是否进行下采样, 或者制定一种方式进行下采样
-        @param drop_rate:
-        @param drop_block: 是否drop block
-        @param block_size:
-        @param max_pool: 是否进行最大池化
-        """
-        super(BasicBlock, self).__init__()
-        self.conv1 = conv3x3(inplanes, planes)
-        self.bn1 = nn.BatchNorm2d(planes)
-        self.relu = nn.LeakyReLU(0.1)
-        self.conv2 = conv3x3(planes, planes)
-        self.bn2 = nn.BatchNorm2d(planes)
-        self.conv3 = conv3x3(planes, planes)
-        self.bn3 = nn.BatchNorm2d(planes)
-        self.maxpool = nn.MaxPool2d(stride)
-        self.downsample = downsample
-        self.stride = stride
-        self.drop_rate = drop_rate
-        self.num_batches_tracked = 0
-        self.drop_block = drop_block
-        self.block_size = block_size
-        self.DropBlock = DropBlock(block_size=self.block_size)
-        self.max_pool = max_pool
-
-    def forward(self, x):
-        self.num_batches_tracked += 1
-
-        residual = x
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.relu(out)
-
-        out = self.conv3(out)
-        out = self.bn3(out)
-
-        if self.downsample is not None:
-            residual = self.downsample(x)
-        out += residual
-        out = self.relu(out)
-
-        if self.max_pool:
-            out = self.maxpool(out)
-
-        if self.drop_rate > 0:
-            if self.drop_block == True:
-                feat_size = out.size()[2]
-                keep_rate = max(1.0 - self.drop_rate / (20 * 2000) * (self.num_batches_tracked), 1.0 - self.drop_rate)
-                gamma = (1 - keep_rate) / self.block_size ** 2 * feat_size ** 2 / (feat_size - self.block_size + 1) ** 2
-                out = self.DropBlock(out, gamma=gamma)
-            else:
-                out = F.dropout(out, p=self.drop_rate, training=self.training, inplace=True)
-
-        return out
+from torch import nn, Tensor
+from torch.hub import load_state_dict_from_url
+from torchvision.models.resnet import BasicBlock, Bottleneck, conv1x1, model_urls
 
 
 class ResNet(nn.Module):
 
-    def __init__(self, out_channels, block, n_blocks, drop_rate=0.0, dropblock_size=5, max_pool=True):
+    def __init__(
+            self,
+            block: Type[Union[BasicBlock, Bottleneck]],
+            layers: List[int],
+            num_classes: int = 1000,
+            zero_init_residual: bool = False,
+            groups: int = 1,
+            width_per_group: int = 64,
+            replace_stride_with_dilation: Optional[List[bool]] = None,
+            norm_layer: Optional[Callable[..., nn.Module]] = None,
+    ) -> None:
         super(ResNet, self).__init__()
-        self.name = 'resnet12'
-        self.num_channel = out_channels
-        self.out_channels = out_channels
-        self.inplanes = 3
-        self.layer1 = self._make_layer(block, n_blocks[0], out_channels // 2,
-                                       stride=2, drop_rate=drop_rate)
-        self.layer2 = self._make_layer(block, n_blocks[1], out_channels // 2,
-                                       stride=2, drop_rate=drop_rate)
-        self.layer3 = self._make_layer(block, n_blocks[2], out_channels,
-                                       stride=2, drop_rate=drop_rate, drop_block=True, block_size=dropblock_size)
-        self.layer4 = self._make_layer(block, n_blocks[3], out_channels,
-                                       stride=2, drop_rate=drop_rate, drop_block=True, block_size=dropblock_size,
-                                       max_pool=max_pool)
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+        self._norm_layer = norm_layer
+        self.s_scale = 32
+        self.out_channels = 512
 
-        self.drop_rate = drop_rate
+        self.inplanes = 64
+        self.dilation = 1
+        if replace_stride_with_dilation is None:
+            # each element in the tuple indicates if we should replace
+            # the 2x2 stride with a dilated convolution instead
+            replace_stride_with_dilation = [False, False, False]
+        if len(replace_stride_with_dilation) != 3:
+            raise ValueError("replace_stride_with_dilation should be None "
+                             "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
+        self.groups = groups
+        self.base_width = width_per_group
+        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
+                               bias=False)
+        self.bn1 = norm_layer(self.inplanes)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.layer1 = self._make_layer(block, 64, layers[0])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2,
+                                       dilate=replace_stride_with_dilation[0])
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2,
+                                       dilate=replace_stride_with_dilation[1])
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
+                                       dilate=replace_stride_with_dilation[2])
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(512 * block.expansion, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='leaky_relu')
-            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def _make_layer(self, block, n_block, planes, stride=1, drop_rate=0.0, drop_block=False, block_size=1,
-                    max_pool=True):
+        # Zero-initialize the last BN in each residual branch,
+        # so that the residual branch starts with zeros, and each residual block behaves like an identity.
+        # This improves the model by 0.2~0.3% according to https://arxiv.org/abs/1706.02677
+        if zero_init_residual:
+            for m in self.modules():
+                if isinstance(m, Bottleneck):
+                    nn.init.constant_(m.bn3.weight, 0)  # type: ignore[arg-type]
+                elif isinstance(m, BasicBlock):
+                    nn.init.constant_(m.bn2.weight, 0)  # type: ignore[arg-type]
+
+    def _make_layer(self, block: Type[Union[BasicBlock, Bottleneck]], planes: int, blocks: int,
+                    stride: int = 1, dilate: bool = False) -> nn.Sequential:
+        norm_layer = self._norm_layer
         downsample = None
+        previous_dilation = self.dilation
+        if dilate:
+            self.dilation *= stride
+            stride = 1
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                nn.Conv2d(self.inplanes, planes * block.expansion,
-                          kernel_size=1, stride=1, bias=False),
-                nn.BatchNorm2d(planes * block.expansion),
+                conv1x1(self.inplanes, planes * block.expansion, stride),
+                norm_layer(planes * block.expansion),
             )
 
         layers = []
-        if n_block == 1:
-            layer = block(self.inplanes, planes, stride, downsample, drop_rate, drop_block, block_size,
-                          max_pool=max_pool)
-        else:
-            layer = block(self.inplanes, planes, stride, downsample, drop_rate)
-        layers.append(layer)
+        layers.append(block(self.inplanes, planes, stride, downsample, self.groups,
+                            self.base_width, previous_dilation, norm_layer))
         self.inplanes = planes * block.expansion
-
-        for i in range(1, n_block):
-            if i == n_block - 1:
-                layer = block(self.inplanes, planes, drop_rate=drop_rate, drop_block=drop_block,
-                              block_size=block_size)
-            else:
-                layer = block(self.inplanes, planes, drop_rate=drop_rate)
-            layers.append(layer)
+        for _ in range(1, blocks):
+            layers.append(block(self.inplanes, planes, groups=self.groups,
+                                base_width=self.base_width, dilation=self.dilation,
+                                norm_layer=norm_layer))
 
         return nn.Sequential(*layers)
 
-    def forward(self, x, is_feat=False):
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+    def _forward_impl(self, x: Tensor) -> Tensor:
+        # See note [TorchScript super()]
+        x = self.conv1(x)  # (way, channel, s_ / 2, s_ / 2)
+        x = self.bn1(x)  # (way, channel, s_ / 2, s_ / 2)
+        x = self.relu(x)
+        x = self.maxpool(x)  # (way, channel, s_ / 4, s_ / 4)
 
-        return x
+        x = self.layer1(x)  # (way, channel, s_ / 4, s_ / 4)
+        x = self.layer2(x)  # (way, channel, s_ / 8, s_ / 8)
+        x = self.layer3(x)  # (way, channel, s_ / 16, s_ / 16)
+        x = self.layer4(x)  # (way, channel, s_ / 32, s_ / 32)
+
+        # x = self.avgpool(x)
+        # x = torch.flatten(x, 1)
+
+        return x  # (way, channel, s_ / 32, s_ / 32)
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self._forward_impl(x)
 
 
-def resnet12(out_channels, drop_rate=0.0, max_pool=True, **kwargs):
-    """Constructs a ResNet-12 models.
+def _resnet(
+        arch: str,
+        block: Type[Union[BasicBlock, Bottleneck]],
+        layers: List[int],
+        pretrained: bool,
+        frozen: bool,
+        progress: bool,
+        **kwargs: Any
+) -> ResNet:
+    model = ResNet(block, layers, **kwargs)
+    if pretrained:
+        state_dict = load_state_dict_from_url(model_urls[arch],
+                                              progress=progress)
+        model.load_state_dict(state_dict)
+    return model
+
+
+def resnet18(pretrained: bool = False, progress: bool = True, frozen: bool = False, **kwargs: Any) -> ResNet:
+    r"""ResNet-18 model from
+    `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
     """
-    model = ResNet(out_channels, BasicBlock, [1, 1, 1, 1], drop_rate=drop_rate, max_pool=max_pool, **kwargs)
+    model = _resnet('resnet18', BasicBlock, [2, 2, 2, 2], pretrained, progress, frozen,
+                    **kwargs)
+    if frozen:
+        for p in model.parameters():
+            p.requires_grad = False
     return model
 
 
 if __name__ == '__main__':
-    model = resnet12(128)
-    data = torch.randn(2, 3, 84, 84)
-    x = model(data)
-    print(x.size())
-    print(x.shape)
+    r18 = resnet18(False, True)
+    x = torch.randn([5, 3, 112, 112])  # [way, c, s_, s_]
+    y = r18(x)
+    print(y.shape)

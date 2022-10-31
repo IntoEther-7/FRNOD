@@ -48,11 +48,11 @@ if __name__ == '__main__':
 
     # support = torch.randn([num_classes, channels, roi_size[0], roi_size[1]])
     # support = torch.randn([num_classes, resolution, channels])
-    # box_head = FRTwoMLPHead(in_channels=channels * resolution, representation_size=representation_size)
-    # box_predictor = FRPredictor(in_channels=representation_size, num_classes=num_classes,
+    # box_head = FRTwoMLPHead(f_channels=channels * resolution, representation_size=representation_size)
+    # box_predictor = FRPredictor(f_channels=representation_size, num_classes=num_classes,
     #                             support=support, catIds=[1, 2], Woodubry=True,
     #                             resolution=resolution, channels=channels, scale=scale)
-    # box_predictor = FastRCNNPredictor(in_channels=3, num_classes=None)
+    # box_predictor = FastRCNNPredictor(f_channels=3, num_classes=None)
     model = FROD(shot=support_shot, representation_size=representation_size,
                  resolution=resolution,
                  channels=channels,

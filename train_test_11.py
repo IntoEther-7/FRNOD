@@ -4,6 +4,7 @@
 # TIME: 2022-10-22 16:29
 import json
 import random
+import sys
 from pprint import pprint
 
 import torch
@@ -14,9 +15,11 @@ from torchvision.models.detection.faster_rcnn import FasterRCNN, FastRCNNPredict
 from torchvision.ops import roi_align, MultiScaleRoIAlign
 from tqdm import tqdm
 
+from torchvision.models.resnet import ResNet
+
 from models.FROD import FROD
 from models.backbone.Conv_4 import BackBone
-from models.backbone.ResNet import resnet12
+from models.backbone.ResNet import resnet18
 from models.change.box_predictor import FRPredictor
 from models.change.box_head import FRTwoMLPHead
 from utils.data.dataset import FsodDataset
@@ -31,26 +34,29 @@ if __name__ == '__main__':
     support_shot = 5
     query_shot = 5
     # 超参
-    rpn_fg_iou_thresh = 0.5
-    rpn_bg_iou_thresh = 0.5
+    rpn_fg_iou_thresh = 0.7
+    rpn_bg_iou_thresh = 0.3
     batch_size_per_image = 256
     positive_fraction = 0.5
-    # channels = 64
-    channels = 128
     rpn_positive_fraction = 0.7
-    rpn_pre_nms_top_n = {'training': 12000, 'testing': 12000}
-    rpn_post_nms_top_n = {'training': 2000, 'testing': 2000}
+    rpn_pre_nms_top_n = {'training': 2000, 'testing': 2000}
+    rpn_post_nms_top_n = {'training': 200, 'testing': 200}
     # rpn_pre_nms_top_n = {'training': 6000, 'testing': 6000}
     # rpn_post_nms_top_n = {'training': 20, 'testing': 20}
     roi_size = (7, 7)
-    support_size = (roi_size[0] * 16, roi_size[1] * 16)
     resolution = roi_size[0] * roi_size[1]
-    nms_thresh = 0.7
+    rpn_nms_thresh = 0.7
     scale = 1.
     representation_size = 1024
 
+    # channels = 64
+    # channels = 256
+    channels = 512
     # backbone = BackBone(num_channel=channels)
-    backbone = resnet12(out_channels=channels, drop_rate=0.)
+    backbone = resnet18(pretrained=True, progress=True, frozen=True)
+    # support_size = (roi_size[0] * 16, roi_size[1] * 16)
+    support_size = (roi_size[0] * 32, roi_size[1] * 32)
+
     anchor_generator = AnchorGenerator(sizes=((64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
     roi_pooler = MultiScaleRoIAlign(['0'], output_size=roi_size, sampling_ratio=2)
     root = 'datasets/fsod'
@@ -60,11 +66,11 @@ if __name__ == '__main__':
 
     # support = torch.randn([num_classes, channels, roi_size[0], roi_size[1]])
     # support = torch.randn([num_classes, resolution, channels])
-    # box_head = FRTwoMLPHead(in_channels=channels * resolution, representation_size=representation_size)
-    # box_predictor = FRPredictor(in_channels=representation_size, num_classes=num_classes,
+    # box_head = FRTwoMLPHead(f_channels=channels * resolution, representation_size=representation_size)
+    # box_predictor = FRPredictor(f_channels=representation_size, num_classes=num_classes,
     #                             support=support, catIds=[1, 2], Woodubry=True,
     #                             resolution=resolution, channels=channels, scale=scale)
-    # box_predictor = FastRCNNPredictor(in_channels=3, num_classes=None)
+    # box_predictor = FastRCNNPredictor(f_channels=3, num_classes=None)
     model = FROD(shot=support_shot, representation_size=representation_size, roi_size=roi_size,
                  resolution=resolution,
                  channels=channels,
@@ -81,7 +87,7 @@ if __name__ == '__main__':
                  rpn_pre_nms_top_n_test=rpn_pre_nms_top_n['testing'],
                  rpn_post_nms_top_n_train=rpn_post_nms_top_n['training'],
                  rpn_post_nms_top_n_test=rpn_post_nms_top_n['testing'],
-                 rpn_nms_thresh=nms_thresh,
+                 rpn_nms_thresh=rpn_nms_thresh,
                  rpn_fg_iou_thresh=rpn_fg_iou_thresh,
                  rpn_bg_iou_thresh=rpn_bg_iou_thresh,
                  rpn_batch_size_per_image=batch_size_per_image,
@@ -91,44 +97,41 @@ if __name__ == '__main__':
                  box_head=None,
                  box_predictor=None,
                  box_score_thresh=0.05,
-                 box_nms_thresh=0.5,
+                 box_nms_thresh=0.7,
                  box_detections_per_img=100,  # coco要求
-                 box_fg_iou_thresh=0.5,
-                 box_bg_iou_thresh=0.5,
-                 box_batch_size_per_image=100,
+                 box_fg_iou_thresh=0.7,
+                 box_bg_iou_thresh=0.3,
+                 box_batch_size_per_image=128,
                  box_positive_fraction=0.25,
-                 bbox_reg_weights=None)
+                 bbox_reg_weights=(10., 10., 5., 5.))
 
     if is_cuda:
         model.cuda()
 
     cat_list = [i for i in range(1, 801)]
     random.shuffle(cat_list)
-    num_epoch = len(cat_list) // way
-    big_epoch = 10
-    fine_epoch = int(big_epoch * 0.7)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.02, momentum=0.9)
-    all_loss_list = []
+    num_mission = len(cat_list) // way
+    epoch = 10
+    fine_epoch = int(epoch * 0.7)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.002, momentum=0.9, weight_decay=0.0001)
     all_loss_avg_list = []
 
     # ----------------------------------------------------------------------------------------
-    # weight = torch.load('weights/frnod1_160.pth')
+    # weight = torch.load('weights/frnod1_70.pth')
     # model.load_state_dict(weight['models'])
     # ----------------------------------------------------------------------------------------
 
-    for e in range(1, 10):
-        print('----------------------------------big_epoch: {} / {}-----------------------------------'.format(e + 1,
-                                                                                                               big_epoch))
+    for e in range(0, 10):
+        print('----------------------------------epoch: {} / {}-----------------------------------'.format(e + 1,
+                                                                                                           epoch))
         if e == fine_epoch:
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.002, momentum=0.9)
-        loss_list = []
+            optimizer = torch.optim.SGD(model.parameters(), lr=0.0002, momentum=0.9, weight_decay=0.0001)
         loss_avg_list = []
-        eval_results = []
-        val_loss_list = []
+        # eval_results = []
         val_loss_avg_list = []
-        for i in range(num_epoch):
+        for i in range(num_mission):
 
-            print('--------------------epoch: {} / {}--------------------'.format(i + 1, len(cat_list) // way))
+            print('--------------------mission: {} / {}--------------------'.format(i + 1, len(cat_list) // way))
             print('load data----------------')
             catIds = cat_list[i * way:(i + 1) * way]
             print('catIds:', catIds)
@@ -158,6 +161,9 @@ if __name__ == '__main__':
                     result = model.forward(s_c_list, query_images=[q], targets=[target])
                     loss = result['loss_classifier'] + result['loss_box_reg'] \
                            + result['loss_objectness'] + result['loss_rpn_box_reg']
+                    if torch.isnan(loss).any():
+                        print('梯度炸了!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+                        sys.exit(0)
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
@@ -166,11 +172,9 @@ if __name__ == '__main__':
                     if (i + 1) % 10 == 0:
                         torch.save({'models': model.state_dict()}, 'weights/frnod{}_{}.pth'.format(e + 1, i + 1))
 
-            loss_list.extend(loss_list_tmp)
             loss_avg = float(torch.Tensor(loss_list_tmp).mean(0))
             loss_avg_list.append(loss_avg)
             print('loss_avg:', loss_avg)
-            all_loss_list.extend(loss_list)
             all_loss_avg_list.extend(loss_avg_list)
 
             # 验证----------------------------------------------
@@ -188,119 +192,20 @@ if __name__ == '__main__':
                     result = model.forward(s_c_list, query_images=[v], targets=[target])
                     loss = result['loss_classifier'] + result['loss_box_reg'] \
                            + result['loss_objectness'] + result['loss_rpn_box_reg']
+                    if torch.isnan(loss).any():
+                        print('梯度炸了!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+                        sys.exit(0)
                     # pprint(detection)
                     # pprint(target_ori)
                     # 一个任务的val_loss列表
                     loss_list_tmp.append(float(loss))
 
-            val_loss_list.extend([loss_list_tmp])
             loss_avg = float(torch.Tensor(loss_list_tmp).mean(0))
             val_loss_avg_list.append(loss_avg)
             print('val_loss_avg:', loss_avg)
 
-            print('validation detection---------------')
-            tmp_detection_list = []
-            model.eval()
-            for c_index in range(len(val_list)):
-                vals = val_list[c_index]
-                vals_anns = val_anns_list[c_index]
-                vals_anns_ori = val_anns_list_ori[c_index]
-                for index in tqdm(range(len(vals)), desc='第{} / {}个类别'.format(c_index + 1, len(val_list))):
-                    v = vals[index]
-                    target = vals_anns[index]
-                    target_ori = vals_anns_ori[index]
-                    detection = model.forward(s_c_list, query_images=[v], targets=[target])
-                    # pprint(detection)
-                    # pprint(target_ori)
-                    detection_list = label2dict(detection, target_ori, catIds)
-                    tmp_detection_list.extend(detection_list)
-                    eval_results.extend(detection_list)
-
-            # with open('weights/results/tmp_prediction.json', 'w') as f:
-            #     json.dump(tmp_detection_list, f)
-            #
-            # gt_path = "datasets/fsod/annotations/fsod_train.json"  # 存放真实标签的路径
-            # dt_path = "weights/results/tmp_prediction.json"  # 存放检测结果的路径
-            # cocoGt = COCO(gt_path)
-            # cocoDt = cocoGt.loadRes(dt_path)
-            # cocoEval = COCOeval(cocoGt, cocoDt, "bbox")
-            # cocoEval.evaluate()
-            # cocoEval.accumulate()
-            # cocoEval.summarize()
-
         with open('weights/results/loss_bepoch{}.json'.format(e + 1), 'w') as f:
-            json.dump({'loss_list': loss_list, 'loss_avg_list': loss_avg_list, 'val_loss_list': val_loss_list,
-                       'val_loss_avg_list': val_loss_avg_list}, f)
+            json.dump({'loss_avg_list': loss_avg_list, 'val_loss_avg_list': val_loss_avg_list}, f)
 
     with open('weights/results/loss_all.json', 'w') as f:
-        json.dump({'loss_list': all_loss_list, 'loss_avg_list': all_loss_avg_list}, f)
-    # 验证
-    # gt_path = "datasets/fsod/annotations/fsod_train.json"  # 存放真实标签的路径
-    # dt_path = "datasets/fsod/annotations/fsod_prediction.json"  # 存放检测结果的路径
-    # cocoGt = COCO(gt_path)
-    # cocoDt = cocoGt.loadRes(dt_path)
-    # cocoEval = COCOeval(cocoGt, cocoDt, "bbox")  #
-    # cocoEval.evaluate()
-    # cocoEval.accumulate()
-    # cocoEval.summarize()
-    # for i in range(1, 801):
-    #     if i == 601:
-    #         optimizer = torch.optim.SGD(model.parameters(), lr=0.0002)
-    #     model.train()
-    #     print('--------------------epoch:   {}--------------------'.format(i))
-    #     s_c, s_n, q_c_ori, q_anns_ori, val_ori, val_anns_ori = fsod.triTuple(catId=i)
-    #     s_c, s_n, q_c, q_anns, val, val_anns \
-    #         = pre_process_tri(support=s_c, support_n=s_n,
-    #                       query=q_c_ori, query_anns=q_anns_ori,
-    #                       val=val_ori, val_anns=val_anns_ori,
-    #                       support_transforms=transforms.Compose([transforms.ToTensor(),
-    #                                                              transforms.Resize(support_size)]),
-    #                       query_transforms=transforms.Compose([transforms.ToTensor(),
-    #                                                            transforms.Resize(600)]), is_cuda=is_cuda)
-    #     loss_list = []
-    #     print('train--------------------')
-    #     for j in tqdm(range(len(q_c))):
-    #         q_c_single = [q_c[j]]
-    #         q_c_anns_single = [q_anns[j]]
-    #         q_c_anns_ori_single = [q_anns_ori[j]]
-    #         result = model.forward([s_c, s_n], query_images=q_c_single, targets=q_c_anns_single)
-    #
-    #         # print(result)
-    #         loss = result['loss_classifier'] + result['loss_box_reg'] + result['loss_objectness']
-    #         optimizer.zero_grad()
-    #         loss.backward()
-    #         optimizer.step()
-    #         # print('loss:    ', loss)
-    #         loss_list.append(loss)
-    #         if i % 10 == 0:
-    #             torch.save({'models': model.state_dict()}, 'weights/frnod{}.pth'.format(i))
-    #
-    #     loss_avg = torch.Tensor(loss_list).mean(0)
-    #     print('loss_avg:', loss_avg)
-    #
-    #     print('val--------------------')
-    #     model.eval()
-    #     for j in tqdm(range(len(val))):
-    #         detection_list = []
-    #         val_single = [val[j]]
-    #         val_anns_single = [val_anns[j]]
-    #         val_anns_ori_single = val_anns_ori[j]
-    #         detection = model.forward([s_c, s_n], query_images=val_single, targets=val_anns_single)
-    #         # print([(i['labels'], i['scores']) for i in detection], val_anns_ori)
-    #         detection_list.extend(label2dict(detection, val_anns_ori_single))
-    #         # print('预测结果个数:', len(detection_list))
-    #         eval_results.extend(detection_list)
-    #
-    # torch.save(loss_list, 'weights/loss_list.json')
-    # with open('datasets/fsod/annotations/fsod_prediction.json', 'w') as f:
-    #     json.dump(eval_results, f)
-    #
-    # # 验证
-    # gt_path = "datasets/fsod/annotations/fsod_train.json"  # 存放真实标签的路径
-    # dt_path = "datasets/fsod/annotations/fsod_prediction.json"  # 存放检测结果的路径
-    # cocoGt = COCO(gt_path)
-    # cocoDt = cocoGt.loadRes(dt_path)
-    # cocoEval = COCOeval(cocoGt, cocoDt, "bbox")  #
-    # cocoEval.evaluate()
-    # cocoEval.accumulate()
-    # cocoEval.summarize()
+        json.dump({'loss_avg_list': all_loss_avg_list}, f)

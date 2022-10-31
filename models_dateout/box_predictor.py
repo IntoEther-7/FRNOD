@@ -12,14 +12,14 @@ from torch import nn
 #     for Fast R-CNN.
 #
 #     Args:
-#         in_channels (int): number of input channels
+#         f_channels (int): number of input channels
 #         num_classes (int): number of output classes (including background)
 #     """
 #
-#     def __init__(self, in_channels, num_classes, way):
+#     def __init__(self, f_channels, num_classes, way):
 #         super(FRPredictor, self).__init__()
-#         self.cls_score = nn.Linear(in_channels, num_classes)
-#         self.bbox_pred = nn.Linear(in_channels, num_classes * 4)
+#         self.cls_score = nn.Linear(f_channels, num_classes)
+#         self.bbox_pred = nn.Linear(f_channels, num_classes * 4)
 #         self.way = way
 #
 #     def forward(self, x):

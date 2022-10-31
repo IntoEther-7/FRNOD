@@ -2,9 +2,12 @@
 # PRODUCT: PyCharm
 # AUTHOR: 17795
 # TIME: 2022-10-25 9:13
+from torchvision.models.detection import _utils as det_utils
 from torchvision.models.detection.rpn import RegionProposalNetwork, concat_box_prediction_layers
 import torch
 from torch import nn
+from torch.nn import functional as F
+from torchvision.ops import box_iou
 
 
 class RPN(RegionProposalNetwork):
@@ -50,7 +53,7 @@ class RPN(RegionProposalNetwork):
         # RPN uses all feature maps that are available
         features = list(features.values())
         features_l = []
-        # attention?
+        # attention--------------------------------------------------
         # self.s (way, c, s, s)
         way = self.s.shape[0]
         channels = self.s.shape[1]
@@ -59,12 +62,22 @@ class RPN(RegionProposalNetwork):
             feature = feature * s_r
             features_l.append(feature)
         features = features_l
-        objectness, pred_bbox_deltas = self.head(features)
+
+        objectness, pred_bbox_deltas = self.head(features)  # objectness: [(way, AnchorNum A, ?, ?)]
+
+        # 恢复
+        objectness = [torch.unsqueeze(on.mean(0), dim=0) for on in objectness]  # objectness: [(1, A, ?, ?)]
+        pred_bbox_deltas = [torch.unsqueeze(pbd.mean(0), dim=0) for pbd in pred_bbox_deltas]
+
         anchors = self.anchor_generator(images, features)
 
         num_images = len(anchors)
         num_anchors_per_level_shape_tensors = [o[0].shape for o in objectness]
-        num_anchors_per_level = [s[0] * s[1] * s[2] for s in num_anchors_per_level_shape_tensors] * way
+
+        # attention-------------------------------------
+        num_anchors_per_level = [s[0] * s[1] * s[2] for s in num_anchors_per_level_shape_tensors]
+        # num_anchors_per_level = [s[0] * s[1] * s[2] for s in num_anchors_per_level_shape_tensors]
+
         objectness, pred_bbox_deltas = \
             concat_box_prediction_layers(objectness, pred_bbox_deltas)
         # apply pred_bbox_deltas to anchors to obtain the decoded proposals
@@ -86,3 +99,43 @@ class RPN(RegionProposalNetwork):
                 "loss_rpn_box_reg": loss_rpn_box_reg,
             }
         return boxes, losses
+
+    def compute_loss(self, objectness, pred_bbox_deltas, labels, regression_targets):
+        # type: (Tensor, Tensor, List[Tensor], List[Tensor]) -> Tuple[Tensor, Tensor]
+        """
+        Args:
+            objectness (Tensor)
+            pred_bbox_deltas (Tensor)
+            labels (List[Tensor])
+            regression_targets (List[Tensor])
+
+        Returns:
+            objectness_loss (Tensor)
+            box_loss (Tensor)
+        """
+
+        sampled_pos_inds, sampled_neg_inds = self.fg_bg_sampler(labels)
+        sampled_pos_inds = torch.where(torch.cat(sampled_pos_inds, dim=0))[0]
+        sampled_neg_inds = torch.where(torch.cat(sampled_neg_inds, dim=0))[0]
+
+        sampled_inds = torch.cat([sampled_pos_inds, sampled_neg_inds], dim=0)
+
+        objectness = objectness.flatten()
+
+        labels = torch.cat(labels, dim=0)
+        regression_targets = torch.cat(regression_targets, dim=0)
+
+        box_loss = det_utils.smooth_l1_loss(
+            pred_bbox_deltas[sampled_pos_inds],
+            regression_targets[sampled_pos_inds],
+            beta=1 / 9,
+            size_average=False,
+        ) / (sampled_inds.numel())
+
+        # box_loss = box_iou(pred_bbox_deltas[sampled_pos_inds], regression_targets[sampled_pos_inds])
+
+        objectness_loss = F.binary_cross_entropy_with_logits(
+            objectness[sampled_inds], labels[sampled_inds]
+        )
+
+        return objectness_loss, box_loss

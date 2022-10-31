@@ -36,15 +36,19 @@ class BackBone(nn.Module):
 
         self.layers = nn.Sequential(
             ConvBlock(3, num_channel),
+            nn.BatchNorm2d(num_channel),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
             ConvBlock(num_channel, num_channel),
+            nn.BatchNorm2d(num_channel),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
             ConvBlock(num_channel, num_channel),
+            nn.BatchNorm2d(num_channel),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
             ConvBlock(num_channel, num_channel),
+            nn.BatchNorm2d(num_channel),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2))
 
