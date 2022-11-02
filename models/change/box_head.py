@@ -5,6 +5,7 @@
 from torch import nn
 import torch.nn.functional as F
 
+
 class FRTwoMLPHead(nn.Module):
     """
     Standard heads for FPN-based models
@@ -19,6 +20,8 @@ class FRTwoMLPHead(nn.Module):
 
         self.fc6 = nn.Linear(in_channels, representation_size)
         self.fc7 = nn.Linear(representation_size, representation_size)
+        self.relu = nn.LeakyReLU(inplace=True)
+        self.bn = nn.BatchNorm1d(representation_size)
 
     def forward(self, query_features):
         r"""
@@ -27,8 +30,12 @@ class FRTwoMLPHead(nn.Module):
         :return: query_features: (roi数, channel, s, s), x(roi数, representation_size)
         """
         x = query_features.flatten(start_dim=1)
-
-        x = F.relu(self.fc6(x))
-        x = F.relu(self.fc7(x))
+        # ------------------如何防止这边x的值为=[0], 如果不加激活, 会梯度爆炸
+        x = self.fc6(x)
+        x = self.bn(x)
+        x = self.fc7(x)
+        x = self.bn(x)
+        # x = self.fc6(x)
+        # x = self.fc7(x)
 
         return query_features, x

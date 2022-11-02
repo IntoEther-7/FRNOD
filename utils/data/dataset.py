@@ -15,7 +15,7 @@ from utils.dataset_tools.support_query_constructor import one_way_k_shot
 # __C.PIXEL_MEANS = np.array([[[102.9801, 115.9465, 122.7717]]])
 
 class FsodDataset(Dataset):
-    def __init__(self, root, annFile, way=None, support_shot=2, val_shot=None, img_transform=None,
+    def __init__(self, root, annFile, way=None, support_shot=2, img_transform=None,
                  target_transform=None,
                  seed=None, init=True, quick_test=False):
         super(FsodDataset, self).__init__()
@@ -28,7 +28,6 @@ class FsodDataset(Dataset):
         self.img_transform = img_transform
         self.target_transform = target_transform
         self.support_shot = support_shot
-        self.val_shot = val_shot
         self.quick_test = quick_test
         if seed:
             random.seed(seed)

@@ -149,11 +149,31 @@ def resnet18(pretrained: bool = False, progress: bool = True, frozen: bool = Fal
     if frozen:
         for p in model.parameters():
             p.requires_grad = False
+    model.s_scale = 32
+    model.out_channels = 512
+    return model
+
+
+def resnet50(pretrained: bool = False, progress: bool = True, frozen: bool = False, **kwargs: Any) -> ResNet:
+    r"""ResNet-50 model from
+    `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    model = _resnet('resnet50', Bottleneck, [3, 4, 6, 3], pretrained, progress, frozen,
+                   **kwargs)
+    if frozen:
+        for p in model.parameters():
+            p.requires_grad = False
+    model.s_scale = 32
+    model.out_channels = 2048
     return model
 
 
 if __name__ == '__main__':
-    r18 = resnet18(False, True)
-    x = torch.randn([5, 3, 112, 112])  # [way, c, s_, s_]
-    y = r18(x)
+    r50 = resnet50(True, True)
+    x = torch.randn([5, 3, 1024, 1024])  # [way, c, s_, s_]
+    y = r50(x)
     print(y.shape)

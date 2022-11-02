@@ -56,7 +56,7 @@ if __name__ == '__main__':
     root = 'datasets/fsod'
     train_json = 'datasets/fsod/annotations/fsod_train.json'
     test_json = 'datasets/fsod/annotations/fsod_test.json'
-    fsod = FsodDataset(root, train_json, support_shot=support_shot, val_shot=query_shot)
+    fsod = FsodDataset(root, train_json, support_shot=support_shot)
 
     # support = torch.randn([num_classes, channels, roi_size[0], roi_size[1]])
     # support = torch.randn([num_classes, resolution, channels])

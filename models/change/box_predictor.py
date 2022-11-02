@@ -57,10 +57,13 @@ class FRPredictor(nn.Module):
             assert list(x.shape[2:]) == [1, 1]
         x = x.flatten(start_dim=1)
         support = self.support  # (way + 1, channel, s, s)
-        support = self.cls_conv(support)  # (way + 1, channel, s, s)
         support = support.view(self.way + 1, self.channels, self.resolution)  # (way + 1, channel, resolution)
         support = support.permute(0, 2, 1)  # (way + 1, resolution, channel)
-        query_features = self.cls_conv(query_features)
+
+        # ------------------特征整合, 视情况将其取消注释
+        # support = self.cls_conv(support)  # (way + 1, channel, s, s)
+        # query_features = self.cls_conv(query_features)
+
         # query_features: (roi数, channel, s, s)
         scores = self.cls_predictor(
             support=support,
@@ -94,7 +97,7 @@ class FRPredictor(nn.Module):
         metric_matrix = self.metric(euclidean_matrix,
                                     box_per_image=n,
                                     resolution=self.resolution)  # (roi数, way + 1)
-        logits = metric_matrix * self.scale  # (roi数, way + 1)
+        logits = metric_matrix * self.scale.exp()  # (roi数, way + 1), 防止logits的数值过小导致softmax评分差距不大
         return logits
 
     def reconstruct_feature_map(self, support: torch.Tensor, query: torch.Tensor, Woodubry=True):
@@ -126,6 +129,7 @@ class FRPredictor(nn.Module):
         # 从左到右计算矩阵乘积也避免了在内存中存储可能很大的 d d 矩阵。
         # 但是，如果特征图很大或镜头数特别高（kr > d），则方程式。
         # 8 可能很快变得无法计算。在这种情况下，Qexists 的替代公式，根据计算要求将 d 替换为 kr。
+        # 计算的结果完全相同
         if Woodubry:
             # channel < kr 建议使用eq10
             # FRN论文, 公式10

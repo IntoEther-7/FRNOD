@@ -16,7 +16,7 @@ from models.change.box_predictor import FRPredictor
 class FROD(nn.Module):
     def __init__(self,
                  # box_predictor params
-                 shot, representation_size, roi_size,
+                 way, shot, representation_size, roi_size,
                  resolution, channels, scale,
                  backbone, num_classes=None,
                  # transform parameters
@@ -42,6 +42,11 @@ class FROD(nn.Module):
         self.channels = channels
         self.resolution = resolution
 
+        if self.channels < way * self.resolution:
+            self.Woodubry = True
+        else:
+            self.Woodubry = False
+
         self.backbone = backbone
         # representation_size,support,resolution,channels,scale
         self.support_branch = SupportBranch(backbone, shot=self.shot, channels=self.channels,
@@ -49,7 +54,8 @@ class FROD(nn.Module):
         self.box_head = FRTwoMLPHead(in_channels=channels * resolution, representation_size=representation_size)
         self.box_predictor = FRPredictor(f_channels=representation_size, q_channels=self.channels,
                                          num_classes=num_classes, support=None,
-                                         catIds=[1, 2], Woodubry=True, resolution=resolution, channels=channels,
+                                         catIds=[1, 2], Woodubry=self.Woodubry, resolution=resolution,
+                                         channels=channels,
                                          scale=scale)
         self.fast_rcnn = FasterRCNN(backbone, None,
                                     # transform parameters
@@ -70,9 +76,6 @@ class FROD(nn.Module):
                                     box_batch_size_per_image, box_positive_fraction,
                                     bbox_reg_weights)
         self.FRTwoMLPHead = FRTwoMLPHead(in_channels=channels * resolution, representation_size=representation_size)
-        # self.FRPredictor = FRPredictor(f_channels=representation_size, num_classes=num_classes,
-        #                                support=None, catIds=[1, 2], Woodubry=False,
-        #                                resolution=resolution, channels=channels, scale=scale)
 
     def forward(self, support_list, query_images, targets):
         r"""

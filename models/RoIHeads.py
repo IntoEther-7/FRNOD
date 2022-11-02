@@ -211,7 +211,29 @@ class RoIHeads(nn.Module):
         boxes_per_image = [boxes_in_image.shape[0] for boxes_in_image in proposals]
         pred_boxes = self.box_coder.decode(box_regression, proposals)
 
+        # ------------------在预测分数时可能去除背景类别的影响
         pred_scores = F.softmax(class_logits, -1)
+
+        # 在这里分离预测的前后景
+        pred_labels = torch.argmax(pred_scores, dim=1)
+        bg_index = torch.where(pred_labels < 1)[0]
+        fg_index = torch.where(pred_labels > 0)[0]
+
+        start = 0
+        fg_per_image = []
+        for boxes_num in boxes_per_image:
+            end = start + boxes_num
+            fg_per_image.append(
+                torch.where(torch.where(fg_index < end)[0] >= start)[0].shape[0]
+            )
+            start = end
+        boxes_per_image = fg_per_image
+
+        pred_boxes = pred_boxes[fg_index][:, 1:]
+        class_logits_fg = class_logits[fg_index][:, 1:]
+
+        # 对前景的分数进行预测
+        pred_scores = F.softmax(class_logits_fg, -1)
 
         pred_boxes_list = pred_boxes.split(boxes_per_image, 0)
         pred_scores_list = pred_scores.split(boxes_per_image, 0)
@@ -223,14 +245,14 @@ class RoIHeads(nn.Module):
             boxes = box_ops.clip_boxes_to_image(boxes, image_shape)
 
             # create labels for each prediction
-            labels = torch.arange(num_classes, device=device)
+            labels = torch.arange(num_classes - 1, device=device) + 1
             labels = labels.view(1, -1).expand_as(scores)
 
             # 修改
             # remove predictions with the background label
-            boxes = boxes[:, 1:]
-            scores = scores[:, 1:]
-            labels = labels[:, 1:]
+            # boxes = boxes[:, 1:]
+            # scores = scores[:, 1:]
+            # labels = labels[:, 1:]
 
             # batch everything, by making every class prediction be a separate instance
             boxes = boxes.reshape(-1, 4)
@@ -425,13 +447,28 @@ def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
 
     # criterion = NLLLoss().cuda()
     # classification_loss = criterion(class_logits, labels)
-    classification_loss = F.cross_entropy(class_logits, labels)
+    # ------------------计算损失时, 尝试去除背景类影响
+    # classification_loss = F.cross_entropy(class_logits, labels)
 
     # get indices that correspond to the regression targets for
     # the corresponding ground truth labels, to be used with
     # advanced indexing
     sampled_pos_inds_subset = torch.where(labels > 0)[0]
     labels_pos = labels[sampled_pos_inds_subset]
+
+    # 背景分离
+    bg_index = torch.where(labels < 1)[0]
+    labels_bg = labels[bg_index]
+    bg_prediction = class_logits[labels_bg]
+
+    # 只取用gt框对应的部分进行损失计算
+    prediction = class_logits[sampled_pos_inds_subset]
+    classification_loss_fg = F.cross_entropy(prediction, labels_pos) / labels_pos.shape[0]
+    classification_loss_bg = F.cross_entropy(bg_prediction, labels_bg) / labels_bg.shape[0]
+
+    # 融合损失
+    classification_loss = classification_loss_fg + classification_loss_bg
+
     N, num_classes = class_logits.shape
     box_regression = box_regression.reshape(N, box_regression.size(-1) // 4, 4)
 

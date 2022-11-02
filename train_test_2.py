@@ -17,7 +17,7 @@ if __name__ == '__main__':
     root = 'datasets/fsod'
     train_json = 'datasets/fsod/annotations/fsod_train.json'
     test_json = 'datasets/fsod/annotations/fsod_test.json'
-    fsod = FsodDataset(root, test_json, support_shot=2, val_shot=5)
+    fsod = FsodDataset(root, test_json, support_shot=2)
     s_c, s_n, q_c_list, q_anns = fsod.triTuple(catId=1)
     s_c, s_n, q_c_list, q_anns = pre_process_tri(s_c, q_c_list, q_anns, s_n)
     print('s_c      : ', s_c.shape)

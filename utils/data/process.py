@@ -2,6 +2,8 @@
 # PRODUCT: PyCharm
 # AUTHOR: 17795
 # TIME: 2022-10-17 9:03
+import random
+
 import PIL.Image
 import torch
 from PIL import Image
@@ -11,7 +13,7 @@ from torchvision.transforms import transforms
 def pre_process(support: list, query: list, query_anns: list, val: list, val_anns: list,
                 support_transforms=transforms.Compose([transforms.ToTensor(),
                                                        transforms.Resize((320, 320))]),
-                query_transforms=transforms.Compose([transforms.ToTensor()]), is_cuda=False):
+                query_transforms=transforms.Compose([transforms.ToTensor()]), is_cuda=False, random_sort=False):
     r"""
     图像处理, 转换成tensor, s_c, s_n为tensor[shot, channel, 320, 320], q_c为[tensor, tensor, ...],
     gt_bboxes为[标注列表[每张图像的标注[每个盒子的参数]]],
@@ -31,9 +33,37 @@ def pre_process(support: list, query: list, query_anns: list, val: list, val_ann
     s_c_list.insert(0, bg_t)
     q_c_list = [transform_query(q, query_transforms, is_cuda) for q in query]
     q_anns_list = [transform_anns(query_anns[i], is_cuda, i + 1) for i in range(len(query_anns))]
+    q_c_list, q_anns_list = cat_list(q_c_list, q_anns_list, random_sort)
     val_list = [transform_query(v, query_transforms, is_cuda) for v in val]
     val_anns_list = [transform_anns(val_anns[i], is_cuda, i + 1) for i in range(len(val_anns))]
+    val_list, val_anns_list = cat_list(val_list, val_anns_list, random_sort)
     return s_c_list, q_c_list, q_anns_list, val_list, val_anns_list
+
+
+def cat_list(list_c_image: list, list_c_ann: list, random_sort):
+    r"""
+    把[class1[images1, images2, ...],class2[images1, ...]]
+    :param list_c_image:
+    :return:
+    """
+    # ------------------数据集处理, 乱序
+    l_img = []
+    for c_image in list_c_image:
+        for img in c_image:
+            l_img.append(img)
+
+    l_ann = []
+    for c_ann in list_c_ann:
+        for ann in c_ann:
+            l_ann.append(ann)
+
+    if random_sort:
+        index_list = [i for i in range(len(l_img))]
+        random.shuffle(index_list)
+        l_img = [l_img[i] for i in index_list]
+        l_ann = [l_ann[i] for i in index_list]
+
+    return l_img, l_ann
 
 
 def pre_process_tri(support: dict, query: list, query_anns: list, val, val_anns,
@@ -122,9 +152,27 @@ def transform_anns(query_anns, is_cuda, label):
             else:
                 img_labels.append(i['category_id'])
             if is_cuda:
-                ann_img = {'boxes': torch.tensor(img_bboxes).cuda(), 'labels': torch.tensor(img_labels).cuda()}
+                ann_img = {'ignore': i['ignore'],
+                           'image_id': i['image_id'],
+                           'segmentation': i['segmentation'],
+                           'bbox': i['bbox'],
+                           'area': i['area'],
+                           'category_id': i['category_id'],
+                           'iscrowd': i['iscrowd'],
+                           'id': i['id'],
+                           'boxes': torch.tensor(img_bboxes).cuda(),
+                           'labels': torch.tensor(img_labels).cuda()}
             else:
-                ann_img = {'boxes': torch.tensor(img_bboxes), 'labels': torch.tensor(img_labels)}
+                ann_img = {'ignore': i['ignore'],
+                           'image_id': i['image_id'],
+                           'segmentation': i['segmentation'],
+                           'bbox': i['bbox'],
+                           'area': i['area'],
+                           'category_id': i['category_id'],
+                           'iscrowd': i['iscrowd'],
+                           'id': i['id'],
+                           'boxes': torch.tensor(img_bboxes),
+                           'labels': torch.tensor(img_labels)}
         anns.append(ann_img)
     return anns
 
@@ -163,7 +211,7 @@ def label2dict(detection, val_anns_ori_single, label_list):
             w = x2 - x1
             h = y2 - y1
             box = [x1, y1, w, h]
-            res.append({'image_id': val_anns_ori_single[0][0]['image_id'], 'bbox': box, 'score': scores[j],
+            res.append({'image_id': val_anns_ori_single['image_id'], 'bbox': box, 'score': scores[j],
                         'category_id': label_list[labels[j] - 1]})
             # img_res = []
             # if not len(i['scores'] == 0):

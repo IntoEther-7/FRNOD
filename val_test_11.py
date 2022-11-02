@@ -3,6 +3,7 @@
 # AUTHOR: 17795
 # TIME: 2022-10-22 16:29
 import json
+import os
 import random
 from pprint import pprint
 
@@ -16,7 +17,7 @@ from tqdm import tqdm
 
 from models.FROD import FROD
 from models.backbone.Conv_4 import BackBone
-from models.backbone.ResNet import resnet18
+from models.backbone.ResNet import resnet18, resnet50
 from models.change.box_predictor import FRPredictor
 from models.change.box_head import FRTwoMLPHead
 from utils.data.dataset import FsodDataset
@@ -37,31 +38,38 @@ if __name__ == '__main__':
     rpn_bg_iou_thresh = 0.3
     batch_size_per_image = 256
     positive_fraction = 0.5
-    rpn_positive_fraction = 0.7
-    rpn_pre_nms_top_n = {'training': 2000, 'testing': 2000}
-    rpn_post_nms_top_n = {'training': 200, 'testing': 200}
+    rpn_positive_fraction = 0.5
+    rpn_pre_nms_top_n = {'training': 12000, 'testing': 6000}
+    rpn_post_nms_top_n = {'training': 2000, 'testing': 1000}
     # rpn_pre_nms_top_n = {'training': 6000, 'testing': 6000}
     # rpn_post_nms_top_n = {'training': 20, 'testing': 20}
     roi_size = (7, 7)
     resolution = roi_size[0] * roi_size[1]
     rpn_nms_thresh = 0.7
     scale = 1.
-    representation_size = 1024
+    representation_size = 512
 
     # channels = 64
     # channels = 256
-    channels = 512
+    # channels = 512
     # backbone = BackBone(num_channel=channels)
-    backbone = resnet18(pretrained=True, progress=True, frozen=True)
+    # backbone = resnet18(pretrained=True, progress=True, frozen=True)
+    backbone = resnet50(pretrained=True, progress=True, frozen=False)
+    channels = backbone.out_channels
+    s_scale = backbone.s_scale
     # support_size = (roi_size[0] * 16, roi_size[1] * 16)
-    support_size = (roi_size[0] * 32, roi_size[1] * 32)
+    support_size = (roi_size[0] * s_scale, roi_size[1] * s_scale)
 
     anchor_generator = AnchorGenerator(sizes=((64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
     roi_pooler = MultiScaleRoIAlign(['0'], output_size=roi_size, sampling_ratio=2)
     root = 'datasets/fsod'
     train_json = 'datasets/fsod/annotations/fsod_train.json'
     test_json = 'datasets/fsod/annotations/fsod_test.json'
-    fsod = FsodDataset(root, train_json, support_shot=support_shot, val_shot=query_shot)
+    fsod = FsodDataset(root, train_json, support_shot=support_shot)
+    if not (os.path.exists('weights/results')):
+        os.makedirs('weights/results')
+
+    torch.set_printoptions(sci_mode=False)
 
     # support = torch.randn([num_classes, channels, roi_size[0], roi_size[1]])
     # support = torch.randn([num_classes, resolution, channels])
@@ -70,7 +78,7 @@ if __name__ == '__main__':
     #                             support=support, catIds=[1, 2], Woodubry=True,
     #                             resolution=resolution, channels=channels, scale=scale)
     # box_predictor = FastRCNNPredictor(f_channels=3, num_classes=None)
-    model = FROD(shot=support_shot, representation_size=representation_size, roi_size=roi_size,
+    model = FROD(way=way, shot=support_shot, representation_size=representation_size, roi_size=roi_size,
                  resolution=resolution,
                  channels=channels,
                  scale=scale,
@@ -78,28 +86,28 @@ if __name__ == '__main__':
                  num_classes=num_classes,
                  min_size=600,
                  max_size=1000,
-                 image_mean=[0.48898793804461593, 0.45319346269085636, 0.40628443137676473],
-                 image_std=[0.2889130963312614, 0.28236272244671895, 0.29298000781217653],
+                 image_mean=[0., 0., 0.],  # [0.48898793804461593, 0.45319346269085636, 0.40628443137676473]
+                 image_std=[1., 1., 1.],  # [0.2889130963312614, 0.28236272244671895, 0.29298000781217653]
                  rpn_anchor_generator=anchor_generator,
                  rpn_head=None,
                  rpn_pre_nms_top_n_train=rpn_pre_nms_top_n['training'],
                  rpn_pre_nms_top_n_test=rpn_pre_nms_top_n['testing'],
                  rpn_post_nms_top_n_train=rpn_post_nms_top_n['training'],
                  rpn_post_nms_top_n_test=rpn_post_nms_top_n['testing'],
-                 rpn_nms_thresh=rpn_nms_thresh,
-                 rpn_fg_iou_thresh=rpn_fg_iou_thresh,
-                 rpn_bg_iou_thresh=rpn_bg_iou_thresh,
-                 rpn_batch_size_per_image=batch_size_per_image,
-                 rpn_positive_fraction=rpn_positive_fraction,
-                 rpn_score_thresh=0.0,
+                 rpn_nms_thresh=0.7,
+                 rpn_fg_iou_thresh=0.7,
+                 rpn_bg_iou_thresh=0.3,
+                 rpn_batch_size_per_image=256,
+                 rpn_positive_fraction=0.5,
+                 rpn_score_thresh=0.5,
                  box_roi_pool=roi_pooler,
                  box_head=None,
                  box_predictor=None,
                  box_score_thresh=0.05,
-                 box_nms_thresh=0.7,
+                 box_nms_thresh=0.3,
                  box_detections_per_img=100,  # coco要求
-                 box_fg_iou_thresh=0.7,
-                 box_bg_iou_thresh=0.3,
+                 box_fg_iou_thresh=0.5,
+                 box_bg_iou_thresh=0.5,
                  box_batch_size_per_image=128,
                  box_positive_fraction=0.25,
                  bbox_reg_weights=(10., 10., 5., 5.))
@@ -108,10 +116,9 @@ if __name__ == '__main__':
         model.cuda()
 
     # ----------------------------------------------------------------------------------------
-    weight = torch.load('weights/frnod1_10.pth')
+    weight = torch.load('weights_1102_损失修改/frnod2_160.pth')
     model.load_state_dict(weight['models'])
     # ----------------------------------------------------------------------------------------
-
 
     loss_list = []
     loss_avg_list = []
@@ -138,26 +145,21 @@ if __name__ == '__main__':
                               [transforms.ToTensor(),
                                transforms.Resize(support_size)]),
                           query_transforms=transforms.Compose(
-                              [transforms.ToTensor(),
-                               transforms.Resize(600)]),
-                          is_cuda=is_cuda)
+                              [transforms.ToTensor()]),
+                          is_cuda=is_cuda, random_sort=True)
 
         print('validation---------------')
 
         model.eval()
-        for c_index in range(len(val_list)):
-            vals = val_list[c_index]
-            vals_anns = val_anns_list[c_index]
-            vals_anns_ori = val_anns_list_ori[c_index]
-            for index in tqdm(range(len(vals)), desc='第{} / {}个类别'.format(c_index + 1, len(val_list))):
-                v = vals[index]
-                target = vals_anns[index]
-                target_ori = vals_anns_ori[index]
-                detection = model.forward(s_c_list, query_images=[v], targets=[target])
-                # pprint(detection)
-                # pprint(target_ori)
-                detection_list = label2dict(detection, target_ori, catIds)
-                eval_results.extend(detection_list)
+        pbar = tqdm(range(len(val_list)))
+        for index in pbar:
+            v = val_list[index]
+            target = val_anns_list[index]
+            detection = model.forward(s_c_list, query_images=[v], targets=[target])
+            # pprint(detection)
+            # pprint(target_ori)
+            detection_list = label2dict(detection, target, catIds)
+            eval_results.extend(detection_list)
 
     # torch.save(loss_avg_list, 'weights/loss_avg_list.json')
     with open('weights/loss.json', 'w') as f:
