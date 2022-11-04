@@ -10,11 +10,12 @@ class ChannelAttentionModule(nn.Module):
     r"""
     通道注意力模块
     """
+
     def __init__(self, channel, reduction=16):
         r"""
 
         :param channel: 输入通道数
-        :param reduction:
+        :param reduction: 通道缩放倍率
         """
         super(ChannelAttentionModule, self).__init__()
         mid_channel = channel // reduction
@@ -31,6 +32,11 @@ class ChannelAttentionModule(nn.Module):
         # self.act=SiLU()
 
     def forward(self, x):
+        r"""
+
+        :param x: (n ,c, s, s)
+        :return: (n, c, 1, 1)
+        """
         avgout = self.shared_MLP(self.avg_pool(x).view(x.size(0), -1)).unsqueeze(2).unsqueeze(3)
         maxout = self.shared_MLP(self.max_pool(x).view(x.size(0), -1)).unsqueeze(2).unsqueeze(3)
         return self.sigmoid(avgout + maxout)
@@ -45,6 +51,11 @@ class SpatialAttentionModule(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
+        r"""
+
+        :param x: (n, c, s, s)
+        :return: (n, 1, s, s)
+        """
         # map尺寸不变，缩减通道
         avgout = torch.mean(x, dim=1, keepdim=True)
         maxout, _ = torch.max(x, dim=1, keepdim=True)
@@ -66,8 +77,22 @@ class CBAM(nn.Module):
         return out
 
 
+class ModifiedCBAM(nn.Module):
+    def __init__(self, channel, reduction=16):
+        super(ModifiedCBAM, self).__init__()
+        self.channel_attention = ChannelAttentionModule(channel, reduction)
+        self.spatial_attention = SpatialAttentionModule()
+
+    def forward(self, support, query):
+        support_ca = self.channel_attention(support)
+        query_sa = self.spatial_attention(query)
+        out = support_ca * query * query_sa
+        return out
+
+
 if __name__ == '__main__':
     x = torch.randn([6, 512, 320, 320])
-    cbam = CBAM(512)
+    q = torch.randn([512, 320, 320])
+    cbam = ModifiedCBAM(512)
     y = cbam.forward(x)
     print()

@@ -176,11 +176,12 @@ class FRPredictor(nn.Module):
         # query:                                [roi数 * resolution, channel]
         # query.unsqueeze(0):                   [1, roi数 * resolution, channel]
         # Q_bar:                                [way, roi数 * resolution, channel]
+
         euclidean_matrix = Q_bar - query.unsqueeze(0)  # [way + 1(背景), roi数 * resolution, channel]
         euclidean_matrix = euclidean_matrix.pow(2)  # [way + 1(背景), roi数 * resolution, channel], 距离不需要负值
         euclidean_matrix = euclidean_matrix.sum(2)  # [way + 1(背景), roi数 * resolution]
         euclidean_matrix = euclidean_matrix.permute(1, 0)  # [roi数 * resolution, way + 1(背景)]
-        euclidean_matrix = F.normalize(euclidean_matrix, p=1, dim=1)
+        euclidean_matrix = euclidean_matrix / self.resolution
         return euclidean_matrix  # 距离矩阵
 
     def metric(self, euclidean_matrix, box_per_image, resolution):
@@ -207,7 +208,7 @@ class FRPredictor(nn.Module):
         metric_matrix = metric_matrix.view(box_per_image, resolution,
                                            self.way + 1)  # 包括了背景了, [roi数, resolution, way + 1(背景)]
         metric_matrix = metric_matrix.mean(1)  # (roi数, way + 1(背景))
-        metric_matrix += 2 / (self.way + 1)  # [-1,0] -> [0-1]
+        # metric_matrix += 2 / (self.way + 1)  # [-1,0] -> [0-1]
         # k = 2 / (metric_matrix.max(1).values - metric_matrix.min(1).values)
         # b = 1 - metric_matrix.max(1).values * k
         # metric_matrix = metric_matrix * k.unsqueeze(1) + b.unsqueeze(1)

@@ -9,6 +9,8 @@ from torch import nn
 from torch.nn import functional as F
 from torchvision.ops import box_iou
 
+from models.CBAM import ModifiedCBAM
+
 
 class RPN(RegionProposalNetwork):
     def __init__(self,
@@ -28,6 +30,7 @@ class RPN(RegionProposalNetwork):
             #
             pre_nms_top_n, post_nms_top_n, nms_thresh, score_thresh=0.0)
         self.s = None
+        self.ModifiedCBAM: ModifiedCBAM = ModifiedCBAM(512, 16)
 
     def forward(self,
                 images,  # type: ImageList
@@ -55,11 +58,11 @@ class RPN(RegionProposalNetwork):
         features_l = []
         # attention--------------------------------------------------
         # self.s (way, c, s, s)
-        way = self.s.shape[0]
-        channels = self.s.shape[1]
-        s_r = self.s.mean([2, 3]).reshape(way, channels, 1, 1)
+        # way = self.s.shape[0]
+        # channels = self.s.shape[1]
+        # s_r = self.s.mean([2, 3]).reshape(way, channels, 1, 1)
         for feature in features:
-            feature = feature * s_r
+            feature = self.ModifiedCBAM.forward(self.s, feature)
             features_l.append(feature)
         features = features_l
 

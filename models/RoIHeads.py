@@ -17,6 +17,7 @@ from torchvision.models.detection.roi_heads import det_utils, maskrcnn_loss, mas
     keypointrcnn_loss, keypointrcnn_inference
 
 from typing import Optional, List, Dict, Tuple
+from torchvision.ops.boxes import box_iou
 
 
 class RoIHeads(nn.Module):
@@ -230,10 +231,10 @@ class RoIHeads(nn.Module):
         boxes_per_image = fg_per_image
 
         pred_boxes = pred_boxes[fg_index][:, 1:]
-        class_logits_fg = class_logits[fg_index][:, 1:]
+        pred_scores = F.softmax(class_logits, -1)
 
-        # 对前景的分数进行预测
-        pred_scores = F.softmax(class_logits_fg, -1)
+        # 切割前景分数
+        pred_scores = pred_scores[fg_index][:, 1:]
 
         pred_boxes_list = pred_boxes.split(boxes_per_image, 0)
         pred_scores_list = pred_scores.split(boxes_per_image, 0)
@@ -316,8 +317,8 @@ class RoIHeads(nn.Module):
         losses = {}
         if self.training:
             assert labels is not None and regression_targets is not None
-            loss_classifier, loss_box_reg = fastrcnn_loss(
-                class_logits, box_regression, labels, regression_targets)
+            loss_classifier, loss_box_reg = self.fastrcnn_loss(
+                class_logits, box_regression, labels, regression_targets, proposals)
             losses = {
                 "loss_classifier": loss_classifier,
                 "loss_box_reg": loss_box_reg
@@ -425,59 +426,79 @@ class RoIHeads(nn.Module):
 
         return result, losses
 
+    def fastrcnn_loss(self, class_logits, box_regression, labels, regression_targets, proposals):
+        """
+        Computes the loss for Faster R-CNN.
 
-def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
-    # type: (Tensor, Tensor, List[Tensor], List[Tensor]) -> Tuple[Tensor, Tensor]
-    """
-    Computes the loss for Faster R-CNN.
+        Args:
+            class_logits (Tensor)
+            box_regression (Tensor)
+            labels (list[BoxList])
+            regression_targets (Tensor)
 
-    Args:
-        class_logits (Tensor)
-        box_regression (Tensor)
-        labels (list[BoxList])
-        regression_targets (Tensor)
+        Returns:
+            classification_loss (Tensor)
+            box_loss (Tensor)
+        """
 
-    Returns:
-        classification_loss (Tensor)
-        box_loss (Tensor)
-    """
+        labels = torch.cat(labels, dim=0)
+        regression_targets = torch.cat(regression_targets, dim=0)
 
-    labels = torch.cat(labels, dim=0)
-    regression_targets = torch.cat(regression_targets, dim=0)
+        # criterion = NLLLoss().cuda()
+        # classification_loss = criterion(class_logits, labels)
+        # ------------------计算损失时, 尝试去除背景类影响
+        # classification_loss = F.cross_entropy(class_logits, labels)
 
-    # criterion = NLLLoss().cuda()
-    # classification_loss = criterion(class_logits, labels)
-    # ------------------计算损失时, 尝试去除背景类影响
-    # classification_loss = F.cross_entropy(class_logits, labels)
+        # get indices that correspond to the regression targets for
+        # the corresponding ground truth labels, to be used with
+        # advanced indexing
+        sampled_pos_inds_subset = torch.where(labels > 0)[0]
+        labels_pos = labels[sampled_pos_inds_subset]
 
-    # get indices that correspond to the regression targets for
-    # the corresponding ground truth labels, to be used with
-    # advanced indexing
-    sampled_pos_inds_subset = torch.where(labels > 0)[0]
-    labels_pos = labels[sampled_pos_inds_subset]
+        # 背景分离
+        bg_index = torch.where(labels < 1)[0]
+        labels_bg = labels[bg_index]
+        bg_prediction = class_logits[labels_bg]
 
-    # 背景分离
-    bg_index = torch.where(labels < 1)[0]
-    labels_bg = labels[bg_index]
-    bg_prediction = class_logits[labels_bg]
+        # 只取用gt框对应的部分进行损失计算
+        prediction = class_logits[sampled_pos_inds_subset]
+        # classification_loss_fg = F.cross_entropy(prediction, labels_pos) / labels_pos.shape[0]
+        # classification_loss_bg = F.cross_entropy(bg_prediction, labels_bg) / labels_bg.shape[0]
+        classification_loss_fg = F.cross_entropy(prediction, labels_pos)
+        classification_loss_bg = F.cross_entropy(bg_prediction, labels_bg)
 
-    # 只取用gt框对应的部分进行损失计算
-    prediction = class_logits[sampled_pos_inds_subset]
-    classification_loss_fg = F.cross_entropy(prediction, labels_pos) / labels_pos.shape[0]
-    classification_loss_bg = F.cross_entropy(bg_prediction, labels_bg) / labels_bg.shape[0]
+        # 融合损失
+        classification_loss = classification_loss_fg + classification_loss_bg
 
-    # 融合损失
-    classification_loss = classification_loss_fg + classification_loss_bg
+        N, num_classes = class_logits.shape
+        box_regression = box_regression.reshape(N, box_regression.size(-1) // 4, 4)
 
-    N, num_classes = class_logits.shape
-    box_regression = box_regression.reshape(N, box_regression.size(-1) // 4, 4)
+        # 如何算出box: pred_boxes = self.box_coder.decode(box_regression, proposals)
 
-    box_loss = det_utils.smooth_l1_loss(
-        box_regression[sampled_pos_inds_subset, labels_pos],
-        regression_targets[sampled_pos_inds_subset],
-        beta=1 / 9,
-        size_average=False,
-    )
-    box_loss = box_loss / labels.numel()
+        # ------------------原始的l1 loss-------------------
+        # box_loss = det_utils.smooth_l1_loss(
+        #     box_regression[sampled_pos_inds_subset, labels_pos],  # 回归的几个框
+        #     regression_targets[sampled_pos_inds_subset],  # 真实的回归值
+        #     beta=1 / 9,
+        #     size_average=False,
+        # )
+        #
+        # box_loss = box_loss / labels.numel()
+        # ------------------------------------------------
 
-    return classification_loss, box_loss
+        # ----------------------iou loss------------------
+        box_loss = self.iou_loss(box_regression, regression_targets, proposals, sampled_pos_inds_subset, labels_pos)
+        # ------------------------------------------------
+        return classification_loss, box_loss
+
+    def iou_loss(self, box_regression, regression_targets, proposals, sampled_pos_inds_subset, labels_pos):
+        prediction_boxes = self.box_coder.decode(box_regression, proposals)[sampled_pos_inds_subset, labels_pos]
+        target_boxes = self.box_coder.decode(regression_targets, proposals)[sampled_pos_inds_subset].reshape(
+            [-1, 4])
+        iou_list = []
+        for i in range(len(prediction_boxes)):
+            iou_list.append(box_iou(torch.unsqueeze(prediction_boxes[i], 0), torch.unsqueeze(target_boxes[i], 0)))
+        iou = torch.Tensor(iou_list)
+        iou_loss = (1 - iou).mean()
+        iou_loss.requires_grad = True
+        return iou_loss

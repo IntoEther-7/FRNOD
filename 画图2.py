@@ -6,6 +6,7 @@ import json
 import numpy as np
 from matplotlib import pyplot as plt
 
+# 每张图的loss
 loss_list = []
 with open('weights/results/loss_per_image.json', 'r') as f:
     d: dict = json.load(f)
@@ -25,6 +26,7 @@ with open('weights/results/loss_per_image.json', 'r') as f:
 
 ll = np.array(loss_list)
 
-plt.figure()
+fig = plt.figure()
 plt.plot(ll)
 plt.show()
+plt.close(fig)

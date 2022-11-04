@@ -8,6 +8,8 @@ import random
 from pprint import pprint
 
 import torch
+from PIL import Image
+from PIL.ImageDraw import ImageDraw
 from pycocotools.coco import COCO
 from torchvision import transforms
 from torchvision.models.detection.anchor_utils import AnchorGenerator
@@ -40,7 +42,7 @@ if __name__ == '__main__':
     positive_fraction = 0.5
     rpn_positive_fraction = 0.5
     rpn_pre_nms_top_n = {'training': 12000, 'testing': 6000}
-    rpn_post_nms_top_n = {'training': 2000, 'testing': 1000}
+    rpn_post_nms_top_n = {'training': 2000, 'testing': 500}
     # rpn_pre_nms_top_n = {'training': 6000, 'testing': 6000}
     # rpn_post_nms_top_n = {'training': 20, 'testing': 20}
     roi_size = (7, 7)
@@ -103,7 +105,7 @@ if __name__ == '__main__':
                  box_roi_pool=roi_pooler,
                  box_head=None,
                  box_predictor=None,
-                 box_score_thresh=0.05,
+                 box_score_thresh=0.8,
                  box_nms_thresh=0.3,
                  box_detections_per_img=100,  # coco要求
                  box_fg_iou_thresh=0.5,
@@ -116,7 +118,7 @@ if __name__ == '__main__':
         model.cuda()
 
     # ----------------------------------------------------------------------------------------
-    weight = torch.load('weights_1102_损失修改/frnod2_160.pth')
+    weight = torch.load('weights/frnod10_160.pth')
     model.load_state_dict(weight['models'])
     # ----------------------------------------------------------------------------------------
 
@@ -161,7 +163,22 @@ if __name__ == '__main__':
             detection_list = label2dict(detection, target, catIds)
             eval_results.extend(detection_list)
 
-    # torch.save(loss_avg_list, 'weights/loss_avg_list.json')
+            imgPath = os.path.join(root, 'images', fsod.coco.loadImgs(target['image_id'])[0]['file_name'])
+            savePath = os.path.join(root, 'predictions', fsod.coco.loadImgs(target['image_id'])[0]['file_name'])
+            saveFolder = os.path.split(savePath)[0]
+            img = Image.open(imgPath).convert('RGB')
+            img_draw = ImageDraw(img)
+            if not os.path.exists(saveFolder):
+                os.makedirs(saveFolder)
+            for d in detection_list:
+                x1, y1, x2, y2 = d['bbox']
+                img_draw.rectangle([(x1, y1), (x2, y2)], fill=None, outline='red', width=1)
+            for box in target['boxes']:
+                x1, y1, x2, y2 = box.tolist()
+                img_draw.rectangle([(x1, y1), (x2, y2)], fill=None, outline='blue', width=1)
+            img.save(savePath)
+
+            # torch.save(loss_avg_list, 'weights/loss_avg_list.json')
     with open('weights/loss.json', 'w') as f:
         json.dump({'loss_list': loss_list, 'loss_avg_list': loss_avg_list}, f)
 

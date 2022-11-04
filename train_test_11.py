@@ -121,12 +121,17 @@ if __name__ == '__main__':
     num_mission = len(cat_list) // way
     epoch = 10
     fine_epoch = int(epoch * 0.7)
-    lr_list = [0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001, 0.0005, 0.0002, 0.0001]
+    lr_list = [0.002, 0.001, 0.0005, 0.0002, 0.0001, 0.00005, 0.00002, 0.00001, 0.000005, 0.000002]
 
     # ----------------------------------------
-    with open('weights/results/loss_per_image.json', 'w') as f:
-        json.dump({}, f)
-        print('创建loss_per_image.json')
+    if not os.path.exists('weights/results/loss_per_image.json'):
+        with open('weights/results/loss_per_image.json', 'w') as f:
+            json.dump({}, f)
+            print('创建loss_per_image.json')
+    if not os.path.exists('weights/results/loss_per_image_val.json'):
+        with open('weights/results/loss_per_image_val.json', 'w') as f:
+            json.dump({}, f)
+            print('创建loss_per_image_val.json')
 
     # ----------------------------------------------------------------------------------------
     # weight = torch.load('weights/frnod2_160.pth')
@@ -134,16 +139,16 @@ if __name__ == '__main__':
     # ----------------------------------------------------------------------------------------
 
     for e in range(0, 10):
-        print('----------------------------------epoch: {} / {}-----------------------------------'.format(e + 1,
-                                                                                                           epoch))
-        optimizer = torch.optim.SGD(model.parameters(), lr=lr_list[e], momentum=0.9, weight_decay=0.0001)
+        # print('----------------------------------epoch: {} / {}-----------------------------------'.format(e + 1,
+        #                                                                                                    epoch))
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr_list[e], momentum=0.9, weight_decay=0.0005)
         loss_avg_list = []
         # eval_results = []
         val_loss_avg_list = []
         for i in range(num_mission):
 
             print('--------------------mission: {} / {}--------------------'.format(i + 1, len(cat_list) // way))
-            print('load data----------------')
+            # print('load data----------------')
             catIds = cat_list[i * way:(i + 1) * way]
             print('catIds:', catIds)
             s_c_list_ori, q_c_list_ori, q_anns_list_ori, val_list_ori, val_anns_list_ori \
@@ -171,7 +176,9 @@ if __name__ == '__main__':
                 loss = result['loss_classifier'] + result['loss_box_reg'] \
                        + result['loss_objectness'] + result['loss_rpn_box_reg']
                 pbar.set_postfix(
-                    {'模式': 'trian', '损失': "%.6f" % float(loss)})
+                    {'epoch': '{:3}/{:3}'.format(e + 1, epoch), 'mission': '{:3}/{:3}'.format(i + 1, num_mission),
+                     'catIds': catIds,
+                     '模式': 'trian', '损失': "%.6f" % float(loss)})
                 if torch.isnan(loss).any():
                     print('梯度炸了!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
                     sys.exit(0)
@@ -181,7 +188,7 @@ if __name__ == '__main__':
                 # print('loss:    ', loss)
                 loss_list_tmp.append(float(loss))
 
-            print('将本次任务的loss写入weights/results/loss_per_image.json')
+            # print('将本次任务的loss写入weights/results/loss_per_image.json')
             with open('weights/results/loss_per_image.json', 'r') as f:
                 content = json.load(f)
             with open('weights/results/loss_per_image.json', 'w') as f:
@@ -209,7 +216,9 @@ if __name__ == '__main__':
                 loss = result['loss_classifier'] + result['loss_box_reg'] \
                        + result['loss_objectness'] + result['loss_rpn_box_reg']
                 pbar.set_postfix(
-                    {'模式': 'test', '损失': "%.6f" % float(loss)})
+                    {'epoch': '{:3}/{:3}'.format(e + 1, epoch), 'mission': '{:3}/{:3}'.format(i + 1, num_mission),
+                     'catIds': catIds,
+                     '模式': 'test', '损失': "%.6f" % float(loss)})
                 # pbar.set_postfix_str("loss: %.6f" % float(loss))
                 if torch.isnan(loss).any():
                     print('梯度炸了!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
@@ -218,6 +227,13 @@ if __name__ == '__main__':
                 # pprint(target_ori)
                 # 一个任务的val_loss列表
                 loss_list_tmp.append(float(loss))
+
+            # print('将本次任务的loss写入weights/results/loss_per_image_val.json')
+            with open('weights/results/loss_per_image_val.json', 'r') as f:
+                content = json.load(f)
+            with open('weights/results/loss_per_image_val.json', 'w') as f:
+                content.update({'loss_epoch{}_mission_{}_val'.format(e + 1, i + 1): loss_list_tmp})
+                json.dump(content, f)
 
             loss_avg = float(torch.Tensor(loss_list_tmp).mean(0))
             val_loss_avg_list.append(loss_avg)
