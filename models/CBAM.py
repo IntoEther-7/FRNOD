@@ -84,15 +84,21 @@ class ModifiedCBAM(nn.Module):
         self.spatial_attention = SpatialAttentionModule()
 
     def forward(self, support, query):
-        support_ca = self.channel_attention(support)
-        query_sa = self.spatial_attention(query)
-        out = support_ca * query * query_sa
+        r'''
+
+        :param support: (ns, c, s, s)
+        :param query: (nq=1, c, ?, ?)
+        :return:
+        '''
+        support_ca = self.channel_attention(support)  # (ns, c, 1, 1)
+        query_sa = self.spatial_attention(query)  # (nq=1, 1, ?, ?)
+        out = support_ca * query * query_sa  # (ns, c, ?, ?)
         return out
 
 
 if __name__ == '__main__':
     x = torch.randn([6, 512, 320, 320])
-    q = torch.randn([512, 320, 320])
+    q = torch.randn([1, 512, 320, 320])
     cbam = ModifiedCBAM(512)
-    y = cbam.forward(x)
+    y = cbam.forward(x, q)
     print()

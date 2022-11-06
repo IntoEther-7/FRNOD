@@ -69,8 +69,8 @@ class RPN(RegionProposalNetwork):
         objectness, pred_bbox_deltas = self.head(features)  # objectness: [(way, AnchorNum A, ?, ?)]
 
         # 恢复
-        objectness = [torch.unsqueeze(on.mean(0), dim=0) for on in objectness]  # objectness: [(1, A, ?, ?)]
-        pred_bbox_deltas = [torch.unsqueeze(pbd.mean(0), dim=0) for pbd in pred_bbox_deltas]
+        # objectness = [torch.unsqueeze(on.mean(0), dim=0) for on in objectness]  # objectness: [(1, A, ?, ?)]
+        # pred_bbox_deltas = [torch.unsqueeze(pbd.mean(0), dim=0) for pbd in pred_bbox_deltas]
 
         anchors = self.anchor_generator(images, features)
 
@@ -78,7 +78,7 @@ class RPN(RegionProposalNetwork):
         num_anchors_per_level_shape_tensors = [o[0].shape for o in objectness]
 
         # attention-------------------------------------
-        num_anchors_per_level = [s[0] * s[1] * s[2] for s in num_anchors_per_level_shape_tensors]
+        num_anchors_per_level = [s[0] * s[1] * s[2] * self.s.shape[0] for s in num_anchors_per_level_shape_tensors]
         # num_anchors_per_level = [s[0] * s[1] * s[2] for s in num_anchors_per_level_shape_tensors]
 
         objectness, pred_bbox_deltas = \

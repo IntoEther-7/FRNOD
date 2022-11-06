@@ -134,14 +134,17 @@ if __name__ == '__main__':
             print('创建loss_per_image_val.json')
 
     # ----------------------------------------------------------------------------------------
-    # weight = torch.load('weights/frnod2_160.pth')
-    # model.load_state_dict(weight['models'])
+    weight = torch.load('weights/frnod10_160.pth')
+    model.load_state_dict(weight['models'])
     # ----------------------------------------------------------------------------------------
 
-    for e in range(0, 10):
+    for e in range(10, 40):  # 4 * 60000 * 8
         # print('----------------------------------epoch: {} / {}-----------------------------------'.format(e + 1,
         #                                                                                                    epoch))
-        optimizer = torch.optim.SGD(model.parameters(), lr=lr_list[e], momentum=0.9, weight_decay=0.0005)
+        if e + 1 < 10:
+            optimizer = torch.optim.SGD(model.parameters(), lr=lr_list[e], momentum=0.9, weight_decay=0.0005)
+        else:
+            optimizer = torch.optim.SGD(model.parameters(), lr=0.0002, momentum=0.9, weight_decay=0.0005)
         loss_avg_list = []
         # eval_results = []
         val_loss_avg_list = []
