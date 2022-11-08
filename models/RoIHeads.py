@@ -446,8 +446,8 @@ class RoIHeads(nn.Module):
 
         # criterion = NLLLoss().cuda()
         # classification_loss = criterion(class_logits, labels)
-        # ------------------计算损失时, 尝试去除背景类影响
-        # classification_loss = F.cross_entropy(class_logits, labels)
+        #
+        classification_loss = F.cross_entropy(class_logits, labels)
 
         # get indices that correspond to the regression targets for
         # the corresponding ground truth labels, to be used with
@@ -455,20 +455,22 @@ class RoIHeads(nn.Module):
         sampled_pos_inds_subset = torch.where(labels > 0)[0]
         labels_pos = labels[sampled_pos_inds_subset]
 
-        # 背景分离
-        bg_index = torch.where(labels < 1)[0]
-        labels_bg = labels[bg_index]
-        bg_prediction = class_logits[labels_bg]
-
-        # 只取用gt框对应的部分进行损失计算
-        prediction = class_logits[sampled_pos_inds_subset]
-        # classification_loss_fg = F.cross_entropy(prediction, labels_pos) / labels_pos.shape[0]
-        # classification_loss_bg = F.cross_entropy(bg_prediction, labels_bg) / labels_bg.shape[0]
-        classification_loss_fg = F.cross_entropy(prediction, labels_pos)
-        classification_loss_bg = F.cross_entropy(bg_prediction, labels_bg)
-
-        # 融合损失
-        classification_loss = classification_loss_fg + classification_loss_bg
+        # ------------------计算损失时, 尝试去除背景类影响
+        #
+        # # 背景分离
+        # bg_index = torch.where(labels < 1)[0]
+        # labels_bg = labels[bg_index]
+        # bg_prediction = class_logits[labels_bg]
+        #
+        # # 只取用gt框对应的部分进行损失计算
+        # prediction = class_logits[sampled_pos_inds_subset]
+        # # classification_loss_fg = F.cross_entropy(prediction, labels_pos) / labels_pos.shape[0]
+        # # classification_loss_bg = F.cross_entropy(bg_prediction, labels_bg) / labels_bg.shape[0]
+        # classification_loss_fg = F.cross_entropy(prediction, labels_pos)
+        # classification_loss_bg = F.cross_entropy(bg_prediction, labels_bg)
+        #
+        # # 融合损失
+        # classification_loss = classification_loss_fg + classification_loss_bg
 
         N, num_classes = class_logits.shape
         box_regression = box_regression.reshape(N, box_regression.size(-1) // 4, 4)
@@ -476,18 +478,18 @@ class RoIHeads(nn.Module):
         # 如何算出box: pred_boxes = self.box_coder.decode(box_regression, proposals)
 
         # ------------------原始的l1 loss-------------------
-        # box_loss = det_utils.smooth_l1_loss(
-        #     box_regression[sampled_pos_inds_subset, labels_pos],  # 回归的几个框
-        #     regression_targets[sampled_pos_inds_subset],  # 真实的回归值
-        #     beta=1 / 9,
-        #     size_average=False,
-        # )
-        #
-        # box_loss = box_loss / labels.numel()
+        box_loss = det_utils.smooth_l1_loss(
+            box_regression[sampled_pos_inds_subset, labels_pos],  # 回归的几个框
+            regression_targets[sampled_pos_inds_subset],  # 真实的回归值
+            beta=1 / 9,
+            size_average=False,
+        )
+
+        box_loss = box_loss / labels.numel()
         # ------------------------------------------------
 
         # ----------------------iou loss------------------
-        box_loss = self.iou_loss(box_regression, regression_targets, proposals, sampled_pos_inds_subset, labels_pos)
+        # box_loss = self.iou_loss(box_regression, regression_targets, proposals, sampled_pos_inds_subset, labels_pos)
         # ------------------------------------------------
         return classification_loss, box_loss
 

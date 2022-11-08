@@ -33,6 +33,7 @@ class BackBone(nn.Module):
         self.name = 'conv_4'
         self.num_channel = num_channel
         self.out_channels = num_channel
+        self.s_scale = 16
 
         self.layers = nn.Sequential(
             ConvBlock(3, num_channel),

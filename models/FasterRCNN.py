@@ -193,7 +193,7 @@ class FasterRCNN(GeneralizedRCNN):
             rpn_fg_iou_thresh, rpn_bg_iou_thresh,
             rpn_batch_size_per_image, rpn_positive_fraction,
             rpn_pre_nms_top_n, rpn_post_nms_top_n, rpn_nms_thresh,
-            score_thresh=rpn_score_thresh)
+            score_thresh=rpn_score_thresh, out_channels=out_channels)
 
         if box_roi_pool is None:
             box_roi_pool = MultiScaleRoIAlign(

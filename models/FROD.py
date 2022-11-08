@@ -91,4 +91,35 @@ class FROD(nn.Module):
         self.box_predictor.support = s
         self.fast_rcnn.rpn.s = s
         result = self.fast_rcnn.forward(query_images, targets)
+        aux_loss = self.auxrank(s)
+        if self.training:
+            result.update({'loss_aux': aux_loss})
         return result
+
+    def auxrank(self, support: torch.Tensor):
+        r"""
+
+        :param support: (way, channels, s, s) -> (way, shot * r, channels)
+        :return:
+        """
+        way = support.size(0)
+        channels = support.size(1)
+        size_1 = support.size(2)
+        size_2 = support.size(3)
+        shot = size_1 * size_2
+        support = support.view(way, channels, size_1 * size_2).permute(0, 2, 1)
+        support = support / support.norm(2).unsqueeze(-1)
+        L1 = torch.zeros((way ** 2 - way) // 2).long().cuda()
+        L2 = torch.zeros((way ** 2 - way) // 2).long().cuda()
+        counter = 0
+        for i in range(way):
+            for j in range(i):
+                L1[counter] = i
+                L2[counter] = j
+                counter += 1
+        s1 = support.index_select(0, L1)  # (s^2-s)/2, s, d
+        s2 = support.index_select(0, L2)  # (s^2-s)/2, s, d
+        dists = s1.matmul(s2.permute(0, 2, 1))  # (s^2-s)/2, s, s
+        assert dists.size(-1) == shot
+        frobs = dists.pow(2).sum(-1).sum(-1)
+        return frobs.sum().mul(.03)

@@ -13,7 +13,7 @@ from models.CBAM import ModifiedCBAM
 from models.MADNet import MADNet
 
 
-class RPN(RegionProposalNetwork):
+class CBARPN(RegionProposalNetwork):
     def __init__(self,
                  anchor_generator,
                  head,
@@ -22,7 +22,7 @@ class RPN(RegionProposalNetwork):
                  batch_size_per_image, positive_fraction,
                  #
                  pre_nms_top_n, post_nms_top_n, nms_thresh, score_thresh=0.0, out_channels=512):
-        super(RPN, self).__init__(
+        super(CBARPN, self).__init__(
             anchor_generator,
             head,
             #
@@ -64,29 +64,12 @@ class RPN(RegionProposalNetwork):
         # channels = self.s.shape[1]
         # s_r = self.s.mean([2, 3]).reshape(way, channels, 1, 1)
 
+        loss_attention = 0
         # ModifiedCBAM-----------------------------------
-        # for feature in features:
-        #     feature = self.attention.forward(self.s, feature)
-        #     features_l.append(feature)
-        # features = features_l
-
-        # MADNet-----------------------------------------
-        features_l = []
-        losses_attention = []
-        loss_attention = None
-        for index, feature in enumerate(features):
-            # MADNet-----------------------------------------
-            feature, loss_a = self.attention.forward(self.s, feature, images, targets, index)
+        for feature in features:
+            feature = self.attention.forward(self.s, feature)
             features_l.append(feature)
-            losses_attention.append(loss_a)
-            # ModifiedCBAM-----------------------------------
-            # feature = self.attention.forward(self.s, feature)
-            # features_l.append(feature)
         features = features_l
-        if not loss_attention == None:
-            loss_attention = torch.Tensor(losses_attention).mean()
-        else:
-            loss_attention = 0
 
         objectness, pred_bbox_deltas = self.head(features)  # objectness: [(way, AnchorNum A, ?, ?)]
 

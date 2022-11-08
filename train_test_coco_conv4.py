@@ -6,6 +6,7 @@ import json
 import os.path
 import random
 import sys
+from copy import deepcopy
 from pprint import pprint
 
 import torch
@@ -24,7 +25,7 @@ from models.backbone.ResNet import resnet18, resnet50
 from models.change.box_predictor import FRPredictor
 from models.change.box_head import FRTwoMLPHead
 from utils.data.dataset import FsodDataset
-from utils.data.process import pre_process_tri, label2dict, pre_process
+from utils.data.process import pre_process_tri, label2dict, pre_process, pre_process_coco, read_single_coco
 from pycocotools.cocoeval import COCOeval
 
 if __name__ == '__main__':
@@ -54,7 +55,7 @@ if __name__ == '__main__':
     # channels = 256
     # channels = 512
     # backbone = BackBone(num_channel=channels)
-    backbone = resnet18(pretrained=True, progress=True, frozen=False)
+    backbone = BackBone(64)
     # backbone = resnet50(pretrained=True, progress=True, frozen=False)
     channels = backbone.out_channels
     s_scale = backbone.s_scale
@@ -63,12 +64,12 @@ if __name__ == '__main__':
 
     anchor_generator = AnchorGenerator(sizes=((64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
     roi_pooler = MultiScaleRoIAlign(['0'], output_size=roi_size, sampling_ratio=2)
-    root = 'datasets/fsod'
-    train_json = 'datasets/fsod/annotations/fsod_train.json'
-    test_json = 'datasets/fsod/annotations/fsod_test.json'
-    fsod = FsodDataset(root, train_json, support_shot=support_shot)
-    if not (os.path.exists('weights/results')):
-        os.makedirs('weights/results')
+    root = 'datasets/coco'
+    train_json = 'datasets/coco/annotations/instances_train2017.json'
+    test_json = 'datasets/coco/annotations/instances_val2017.json'
+    fsod = FsodDataset(root, train_json, support_shot=support_shot, dataset_img_path='train2017')
+    if not (os.path.exists('weights_coco_r50/results')):
+        os.makedirs('weights_coco_r50/results')
 
     torch.set_printoptions(sci_mode=False)
 
@@ -104,52 +105,72 @@ if __name__ == '__main__':
                  box_roi_pool=roi_pooler,
                  box_head=None,
                  box_predictor=None,
-                 box_score_thresh=0.05,
+                 box_score_thresh=0.05,  # 0.9 for visualization
                  box_nms_thresh=0.3,
                  box_detections_per_img=100,  # coco要求
                  box_fg_iou_thresh=0.5,
                  box_bg_iou_thresh=0.5,
                  box_batch_size_per_image=128,
-                 box_positive_fraction=0.25,
+                 box_positive_fraction=0.5,
                  bbox_reg_weights=(10., 10., 5., 5.))
 
     if is_cuda:
         model.cuda()
 
-    cat_list = [i for i in range(1, 801)]
+    cat_list = deepcopy(list(fsod.coco.cats.keys()))
     random.shuffle(cat_list)
     num_mission = len(cat_list) // way
-    epoch = 10
+    epoch = 20
     fine_epoch = int(epoch * 0.7)
     lr_list = [0.002, 0.001, 0.0005, 0.0002, 0.0001, 0.00005, 0.00002, 0.00001, 0.000005, 0.000002]
+    epoch_lr = []
 
     # ----------------------------------------
-    if not os.path.exists('weights/results/loss_per_image.json'):
-        with open('weights/results/loss_per_image.json', 'w') as f:
+    if not os.path.exists('weights_coco_r50/results/loss_per_image.json'):
+        with open('weights_coco_r50/results/loss_per_image.json', 'w') as f:
             json.dump({}, f)
             print('创建loss_per_image.json')
-    if not os.path.exists('weights/results/loss_per_image_val.json'):
-        with open('weights/results/loss_per_image_val.json', 'w') as f:
+    if not os.path.exists('weights_coco_r50/results/loss_per_image_val.json'):
+        with open('weights_coco_r50/results/loss_per_image_val.json', 'w') as f:
             json.dump({}, f)
             print('创建loss_per_image_val.json')
 
     # ----------------------------------------------------------------------------------------
-    weight = torch.load('weights/frnod10_160.pth')
-    model.load_state_dict(weight['models'])
+    # continue_weight = 'weights_coco_r50/frnod1_6.pth'
+    # print('!!!!!!!!!!!!!从{}继续训练!!!!!!!!!!!!!'.format(continue_weight))
+    # weight = torch.load(continue_weight)
+    # model.load_state_dict(weight['models'])
+    continue_epoch = -1
+    continue_mission = -1
+    continue_epoch_done = True
+    continue_mission_done = True
     # ----------------------------------------------------------------------------------------
 
-    for e in range(10, 40):  # 4 * 60000 * 8
-        # print('----------------------------------epoch: {} / {}-----------------------------------'.format(e + 1,
-        #                                                                                                    epoch))
-        if e + 1 < 10:
-            optimizer = torch.optim.SGD(model.parameters(), lr=lr_list[e], momentum=0.9, weight_decay=0.0005)
+    for e in range(0, epoch):  # 4 * 60000 * 8
+        if continue_epoch is not None and continue_epoch_done is False:
+            if e < continue_epoch - 1:
+                continue
+            elif e == continue_epoch - 1:
+                continue_epoch_done = True
+        if e < 15:
+            optimizer = torch.optim.SGD(model.parameters(), lr=0.002, momentum=0.9, weight_decay=0.0005)
         else:
             optimizer = torch.optim.SGD(model.parameters(), lr=0.0002, momentum=0.9, weight_decay=0.0005)
+        # if e < 20:
+        #     optimizer = torch.optim.SGD(model.parameters(), lr=lr_list[e // 2], momentum=0.9, weight_decay=0.0005)
+        # else:
+        #     optimizer = torch.optim.SGD(model.parameters(), lr=0.0002, momentum=0.9, weight_decay=0.0005)
+        # optimizer = torch.optim.SGD(model.parameters(), lr=lr_list[e // 4], momentum=0.9, weight_decay=0.0005)
         loss_avg_list = []
         # eval_results = []
         val_loss_avg_list = []
+        continue_flag = False  # 用于判断是否跳过这张图
         for i in range(num_mission):
-
+            if continue_mission is not None and continue_mission_done is False:
+                if i < continue_mission - 1:
+                    continue
+                elif i == continue_mission - 1:
+                    continue_mission_done = True
             print('--------------------mission: {} / {}--------------------'.format(i + 1, len(cat_list) // way))
             # print('load data----------------')
             catIds = cat_list[i * way:(i + 1) * way]
@@ -157,15 +178,15 @@ if __name__ == '__main__':
             s_c_list_ori, q_c_list_ori, q_anns_list_ori, val_list_ori, val_anns_list_ori \
                 = fsod.n_way_k_shot(catIds)
             s_c_list, q_c_list, q_anns_list, val_list, val_anns_list \
-                = pre_process(s_c_list_ori, q_c_list_ori,
-                              q_anns_list_ori,
-                              val_list_ori, val_anns_list_ori,
-                              support_transforms=transforms.Compose(
-                                  [transforms.ToTensor(),
-                                   transforms.Resize(support_size)]),
-                              query_transforms=transforms.Compose(
-                                  [transforms.ToTensor()]),
-                              is_cuda=is_cuda, random_sort=True)
+                = pre_process_coco(s_c_list_ori, q_c_list_ori,
+                                   q_anns_list_ori,
+                                   val_list_ori, val_anns_list_ori,
+                                   support_transforms=transforms.Compose(
+                                       [transforms.ToTensor(),
+                                        transforms.Resize(support_size)]),
+                                   query_transforms=transforms.Compose(
+                                       [transforms.ToTensor()]),
+                                   is_cuda=is_cuda, random_sort=True)
             # print(s_c_list, q_c_list, q_anns_list, val_list, val_anns_list)
             # 训练----------------------------------------------------------
             model.train()
@@ -175,9 +196,21 @@ if __name__ == '__main__':
             for index in pbar:
                 q = q_c_list[index]
                 target = q_anns_list[index]
-                result = model.forward(s_c_list, query_images=[q], targets=[target])
+                for tar in target:
+                    bbox = tar[0]['bbox']
+                    if bbox[2] <= 0.1 or bbox[3] <= 0.1:
+                        tqdm.write('id为{}的标注存在问题, 对应image_id为{}, 跳过此张图像'.format(tar[0]['id'], tar[0]['image_id']))
+                        continue_flag = True
+                if continue_flag is True:
+                    continue_flag = False
+                    continue
+
+                q, target = read_single_coco(q, target, label_ori=catIds, query_transforms=transforms.Compose(
+                    [transforms.ToTensor()]), is_cuda=is_cuda)
+                result = model.forward(s_c_list, query_images=q, targets=target)
                 loss = result['loss_classifier'] + result['loss_box_reg'] \
-                       + result['loss_objectness'] + result['loss_rpn_box_reg']
+                       + result['loss_objectness'] + result['loss_rpn_box_reg'] \
+                       + result['loss_aux'] + result['loss_attention']
                 pbar.set_postfix(
                     {'epoch': '{:3}/{:3}'.format(e + 1, epoch), 'mission': '{:3}/{:3}'.format(i + 1, num_mission),
                      'catIds': catIds,
@@ -191,16 +224,15 @@ if __name__ == '__main__':
                 # print('loss:    ', loss)
                 loss_list_tmp.append(float(loss))
 
-            # print('将本次任务的loss写入weights/results/loss_per_image.json')
-            with open('weights/results/loss_per_image.json', 'r') as f:
+            # print('将本次任务的loss写入weights_coco_r50/results/loss_per_image.json')
+            with open('weights_coco_r50/results/loss_per_image.json', 'r') as f:
                 content = json.load(f)
-            with open('weights/results/loss_per_image.json', 'w') as f:
+            with open('weights_coco_r50/results/loss_per_image.json', 'w') as f:
                 content.update({'loss_epoch{}_mission_{}'.format(e + 1, i + 1): loss_list_tmp})
                 json.dump(content, f)
 
-            if (i + 1) % 10 == 0:
-                print('将本次任务的权重写入weights/frnod{}_{}.pth'.format(e + 1, i + 1))
-                torch.save({'models': model.state_dict()}, 'weights/frnod{}_{}.pth'.format(e + 1, i + 1))
+            print('将本次任务的权重写入weights_coco_r50/frnod{}_{}.pth'.format(e + 1, i + 1))
+            torch.save({'models': model.state_dict()}, 'weights_coco_r50/frnod{}_{}.pth'.format(e + 1, i + 1))
 
             loss_avg = float(torch.Tensor(loss_list_tmp).mean(0))
             loss_avg_list.append(loss_avg)
@@ -215,9 +247,20 @@ if __name__ == '__main__':
             for index in pbar:
                 v = val_list[index]
                 target = val_anns_list[index]
-                result = model.forward(s_c_list, query_images=[v], targets=[target])
+                for tar in target:
+                    bbox = tar[0]['bbox']
+                    if bbox[2] <= 0.1 or bbox[3] <= 0.1:
+                        tqdm.write('id为{}的标注存在问题, 对应image_id为{}, 跳过此张图像'.format(tar[0]['id'], tar[0]['image_id']))
+                        continue_flag = True
+                if continue_flag is True:
+                    continue_flag = False
+                    continue
+                v, target = read_single_coco(v, target, catIds, query_transforms=transforms.Compose(
+                    [transforms.ToTensor()]), is_cuda=is_cuda)
+                result = model.forward(s_c_list, query_images=v, targets=target)
                 loss = result['loss_classifier'] + result['loss_box_reg'] \
-                       + result['loss_objectness'] + result['loss_rpn_box_reg']
+                       + result['loss_objectness'] + result['loss_rpn_box_reg'] \
+                       + result['loss_aux'] + result['loss_attention']
                 pbar.set_postfix(
                     {'epoch': '{:3}/{:3}'.format(e + 1, epoch), 'mission': '{:3}/{:3}'.format(i + 1, num_mission),
                      'catIds': catIds,
@@ -231,10 +274,10 @@ if __name__ == '__main__':
                 # 一个任务的val_loss列表
                 loss_list_tmp.append(float(loss))
 
-            # print('将本次任务的loss写入weights/results/loss_per_image_val.json')
-            with open('weights/results/loss_per_image_val.json', 'r') as f:
+            # print('将本次任务的loss写入weights_coco_r50/results/loss_per_image_val.json')
+            with open('weights_coco_r50/results/loss_per_image_val.json', 'r') as f:
                 content = json.load(f)
-            with open('weights/results/loss_per_image_val.json', 'w') as f:
+            with open('weights_coco_r50/results/loss_per_image_val.json', 'w') as f:
                 content.update({'loss_epoch{}_mission_{}_val'.format(e + 1, i + 1): loss_list_tmp})
                 json.dump(content, f)
 
@@ -242,5 +285,5 @@ if __name__ == '__main__':
             val_loss_avg_list.append(loss_avg)
             print('val_loss_avg:', loss_avg)
 
-        with open('weights/results/loss_bepoch{}.json'.format(e + 1), 'w') as f:
+        with open('weights_coco_r50/results/loss_bepoch{}.json'.format(e + 1), 'w') as f:
             json.dump({'loss_avg_list': loss_avg_list, 'val_loss_avg_list': val_loss_avg_list}, f)

@@ -32,9 +32,9 @@ class FRTwoMLPHead(nn.Module):
         x = query_features.flatten(start_dim=1)
         # ------------------如何防止这边x的值为=[0], 如果不加激活, 会梯度爆炸
         x = self.fc6(x)
-        x = self.bn(x)
+        x = self.relu(x)
         x = self.fc7(x)
-        x = self.bn(x)
+        x = self.relu(x)
         # x = self.fc6(x)
         # x = self.fc7(x)
 

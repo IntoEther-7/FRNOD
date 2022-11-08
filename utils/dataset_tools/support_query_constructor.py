@@ -24,7 +24,7 @@ from torchvision.transforms import transforms
 #     pass
 
 
-def one_way_k_shot(root, dataset: coco.COCO, catId: int, support_shot: int = 2, quick_test=False):
+def one_way_k_shot(root, dataset: coco.COCO, dataset_img_path: str, catId: int, support_shot: int = 2, quick_test=False):
     r"""
     针对某一个种类, 生成k-shot的support和query-shot的query, 并返回support, query, query的标注
     :param dataset: 数据集
@@ -38,12 +38,13 @@ def one_way_k_shot(root, dataset: coco.COCO, catId: int, support_shot: int = 2, 
                                                       support_shot=support_shot, quick_test=quick_test)
 
     support_and_ann = []
+    # TODO: 需要修正路径问题
     for support_annId in support_annIds:
         ann = dataset.anns[support_annId]
         # bbox = ann['bbox']
         imgId = ann['image_id']
         imgInfo = dataset.loadImgs(ids=[imgId])[0]
-        imgPath = os.path.join(root, 'images', imgInfo['file_name'])
+        imgPath = os.path.join(root, dataset_img_path, imgInfo['file_name'])
         # img = crop_support(imgPath, bbox)
         # boxes.append(ann['bbox'])
         # support.append(imgPath)
@@ -52,7 +53,7 @@ def one_way_k_shot(root, dataset: coco.COCO, catId: int, support_shot: int = 2, 
     query = []
     query_anns = []  # type:list
     for imgInfo in dataset.loadImgs(ids=query_imgIds):
-        imgPath = os.path.join(root, 'images', imgInfo['file_name'])
+        imgPath = os.path.join(root, dataset_img_path, imgInfo['file_name'])
         # img = PIL.Image.open(imgPath).convert('RGB')
         query.append(imgPath)
         annIds = dataset.getAnnIds(imgIds=[imgInfo['id']], catIds=catId)
@@ -61,7 +62,7 @@ def one_way_k_shot(root, dataset: coco.COCO, catId: int, support_shot: int = 2, 
     val = []
     val_anns = []
     for imgInfo in dataset.loadImgs(ids=val_imgIds):
-        imgPath = os.path.join(root, 'images', imgInfo['file_name'])
+        imgPath = os.path.join(root, dataset_img_path, imgInfo['file_name'])
         # img = PIL.Image.open(imgPath).convert('RGB')
         val.append(imgPath)
         annIds = dataset.getAnnIds(imgIds=[imgInfo['id']], catIds=catId)

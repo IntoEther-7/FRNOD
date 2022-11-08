@@ -17,7 +17,7 @@ from utils.dataset_tools.support_query_constructor import one_way_k_shot
 class FsodDataset(Dataset):
     def __init__(self, root, annFile, way=None, support_shot=2, img_transform=None,
                  target_transform=None,
-                 seed=None, init=True, quick_test=False):
+                 seed=None, init=True, quick_test=False, dataset_img_path='images'):
         super(FsodDataset, self).__init__()
         self.num_mission = None
         self.mission = None
@@ -33,22 +33,24 @@ class FsodDataset(Dataset):
             random.seed(seed)
 
         # 生成support和query
-        self.support_list = []
-        self.query_list = []
-        self.query_anns_list = []
-        self.val_list = []
-        self.val_anns_list = []
+        self.support_list = {}
+        self.query_list = {}
+        self.query_anns_list = {}
+        self.val_list = {}
+        self.val_anns_list = {}
         if init:
             print('正在为每个类别生成support和query')
             for catId, cat in tqdm(self.coco.cats.items()):
                 support, query, query_anns, val, val_anns = one_way_k_shot(root=self.root, dataset=self.coco,
+                                                                           dataset_img_path=dataset_img_path,
                                                                            catId=catId,
-                                                                           support_shot=self.support_shot, quick_test=self.quick_test)
-                self.support_list.append(support)
-                self.query_list.append(query)
-                self.query_anns_list.append(query_anns)
-                self.val_list.append(val)
-                self.val_anns_list.append(val_anns)
+                                                                           support_shot=self.support_shot,
+                                                                           quick_test=self.quick_test)
+                self.support_list.update({catId: support})
+                self.query_list.update({catId: query})
+                self.query_anns_list.update({catId: query_anns})
+                self.val_list.update({catId: val})
+                self.val_anns_list.update({catId: val_anns})
 
             if way:
                 self.n_way_k_shot(way)
@@ -86,20 +88,20 @@ class FsodDataset(Dataset):
             sample_range.remove(catId)
         sample_index = sample_range[0]
         print('sample_index:', sample_index)
-        s_c = self.support_list[catId - 1]
-        s_n = self.support_list[sample_index - 1]
-        q_c = self.query_list[catId - 1]
-        q_anns = self.query_anns_list[catId - 1]
-        val = self.val_list[catId - 1]
-        val_anns = self.val_anns_list[catId - 1]
+        s_c = self.support_list[catId]
+        s_n = self.support_list[sample_index]
+        q_c = self.query_list[catId]
+        q_anns = self.query_anns_list[catId]
+        val = self.val_list[catId]
+        val_anns = self.val_anns_list[catId]
         return s_c, s_n, q_c, q_anns, val, val_anns
 
     def n_way_k_shot(self, catIds):
-        s_c_list = [self.support_list[catId - 1] for catId in catIds]
-        q_c_list = [self.query_list[catId - 1] for catId in catIds]
-        q_anns_list = [self.query_anns_list[catId - 1] for catId in catIds]
-        val_list = [self.val_list[catId - 1] for catId in catIds]
-        val_anns_list = [self.val_anns_list[catId - 1] for catId in catIds]
+        s_c_list = [self.support_list[catId] for catId in catIds]
+        q_c_list = [self.query_list[catId] for catId in catIds]
+        q_anns_list = [self.query_anns_list[catId] for catId in catIds]
+        val_list = [self.val_list[catId] for catId in catIds]
+        val_anns_list = [self.val_anns_list[catId] for catId in catIds]
         return s_c_list, q_c_list, q_anns_list, val_list, val_anns_list
 
     def get_n_way_k_shot(self, mission_id):
