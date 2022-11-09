@@ -101,12 +101,6 @@ class MADNet(nn.Module):
             loss_attention = self._compute_attention_loss(mask, fg_attention)
         return out, loss_attention
 
-    def _compute_attention_loss(self, mask: Tensor, fg_attention: Tensor):
-        t = transforms.Resize(fg_attention.shape[2:])
-        mask = t(mask.unsqueeze(0).unsqueeze(0)).to(fg_attention.device)
-        loss_attention = F.binary_cross_entropy_with_logits(fg_attention, mask)
-        return loss_attention
-
     def _generate_mask(self, image: ImageList, target, index):
         mask = torch.zeros(image.tensors[index].shape[1:]).cuda()
         boxes = target[index]['boxes']
@@ -115,12 +109,15 @@ class MADNet(nn.Module):
             mask[int(y1):int(y2), int(x1):int(x2)] = 1.0
         return mask
 
-    # https://pic4.zhimg.com/v2-5c44fbf2e0add1153571b0fc7c2a7673_r.jpg
+    def _compute_attention_loss(self, mask: Tensor, fg_attention: Tensor):
+        t = transforms.Resize(fg_attention.shape[2:])
+        mask = t(mask.unsqueeze(0).unsqueeze(0)).to(fg_attention.device)
+        loss_attention = F.binary_cross_entropy(fg_attention, mask)
+        return loss_attention
 
+    # https://pic4.zhimg.com/v2-5c44fbf2e0add1153571b0fc7c2a7673_r.jpg
 
 # class ChannelAttentionModule(nn.Module):
 #     def __init__(self, channels, size_1, size_2):
 #         self.gap = nn.AdaptiveAvgPool2d([1, 1])
 #         self.fc1 = nn.Linear()
-
-

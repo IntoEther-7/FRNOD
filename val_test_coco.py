@@ -56,7 +56,7 @@ if __name__ == '__main__':
     # channels = 256
     # channels = 512
     # backbone = BackBone(num_channel=channels)
-    backbone = resnet18(pretrained=True, progress=True, frozen=False)
+    backbone = BackBone(64)
     # backbone = resnet50(pretrained=True, progress=True, frozen=False)
     channels = backbone.out_channels
     s_scale = backbone.s_scale
@@ -69,8 +69,8 @@ if __name__ == '__main__':
     train_json = 'datasets/coco/annotations/instances_train2017.json'
     test_json = 'datasets/coco/annotations/instances_val2017.json'
     fsod = FsodDataset(root, train_json, support_shot=support_shot, dataset_img_path='train2017')
-    if not (os.path.exists('weights/results')):
-        os.makedirs('weights/results')
+    if not (os.path.exists('weights_coco_r50/results')):
+        os.makedirs('weights_coco_r50/results')
 
     torch.set_printoptions(sci_mode=False)
 
@@ -106,23 +106,23 @@ if __name__ == '__main__':
                  box_roi_pool=roi_pooler,
                  box_head=None,
                  box_predictor=None,
-                 box_score_thresh=0.9,  # 0.5
-                 box_nms_thresh=0.7,  # 0.7
-                 box_detections_per_img=100,  # 20
+                 box_score_thresh=0.05,  # 0.9 for visualization
+                 box_nms_thresh=0.3,
+                 box_detections_per_img=100,  # coco要求
                  box_fg_iou_thresh=0.5,
                  box_bg_iou_thresh=0.5,
                  box_batch_size_per_image=128,
-                 box_positive_fraction=0.25,
+                 box_positive_fraction=0.5,
                  bbox_reg_weights=(10., 10., 5., 5.))
 
     if is_cuda:
         model.cuda()
 
     # ----------------------------------------------------------------------------------------
-    # weight_path = 'weights/frnod1_9.pth'
-    # weight = torch.load(weight_path)
-    # model.load_state_dict(weight['models'])
-    # print('使用%s' % weight_path)
+    weight_path = 'weights_coco_r50/frnod2_4.pth'
+    weight = torch.load(weight_path)
+    model.load_state_dict(weight['models'])
+    print('使用%s' % weight_path)
     # ----------------------------------------------------------------------------------------
 
     # loss_list = []

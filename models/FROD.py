@@ -109,8 +109,8 @@ class FROD(nn.Module):
         shot = size_1 * size_2
         support = support.view(way, channels, size_1 * size_2).permute(0, 2, 1)
         support = support / support.norm(2).unsqueeze(-1)
-        L1 = torch.zeros((way ** 2 - way) // 2).long().cuda()
-        L2 = torch.zeros((way ** 2 - way) // 2).long().cuda()
+        L1 = torch.zeros((way ** 2 - way) // 2).long().to(support.device)
+        L2 = torch.zeros((way ** 2 - way) // 2).long().to(support.device)
         counter = 0
         for i in range(way):
             for j in range(i):
