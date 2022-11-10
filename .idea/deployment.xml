@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="hadoop@192.168.134.153:22 password" remoteFilesAllowedToDisappearOnAutoupload="false" showNewOnSourceInSync="false" showNewOnTargetInSync="false">
+  <component name="PublishConfigData" autoUpload="Always" serverName="chenzh@10.196.83.200:22" remoteFilesAllowedToDisappearOnAutoupload="false" showEqualInSync="true" showNewOnTargetInSync="false" showExcludedInSync="true">
     <serverData>
-      <paths name="hadoop@192.168.134.153:22 password">
+      <paths name="chenzh@10.196.83.200:22">
         <serverdata>
           <mappings>
-            <mapping deploy="/FRNOD" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/code/FRNOD" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>
-      <paths name="hadoop@192.168.134.153:22 password (1)">
+      <paths name="hadoop@192.168.134.153:22 password">
         <serverdata>
           <mappings>
             <mapping deploy="/FRNOD" local="$PROJECT_DIR$" web="/" />
