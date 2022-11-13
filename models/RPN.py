@@ -57,7 +57,7 @@ class RPN(RegionProposalNetwork):
                 """
         # RPN uses all feature maps that are available
         features = list(features.values())
-        features_l = []
+        # features_l = []
         # attention--------------------------------------------------
         # self.s (way, c, s, s)
         # way = self.s.shape[0]
@@ -76,7 +76,7 @@ class RPN(RegionProposalNetwork):
         loss_attention = None
         for index, feature in enumerate(features):
             # MADNet-----------------------------------------
-            feature, loss_a = self.attention.forward(self.s, feature, images, targets, index)
+            feature, loss_a = self.attention.forward(self.s, feature, images, targets, 0)
             features_l.append(feature)
             losses_attention.append(loss_a)
             # ModifiedCBAM-----------------------------------

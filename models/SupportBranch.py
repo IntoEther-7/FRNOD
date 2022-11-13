@@ -5,6 +5,8 @@
 import torch
 from torch import nn
 
+from models.backbone.ModifiedSFNet import ModifiedSFNet
+
 
 class SupportBranch(nn.Module):
     def __init__(self, backbone, shot, channels, resolution, image_mean=None, image_std=None):
@@ -28,7 +30,10 @@ class SupportBranch(nn.Module):
         s_list = []
         for support in support_list:
             support = self.normalize(support)
-            support = self.backbone(support)  # (shot, channels, s, s)
+            if isinstance(self.backbone, ModifiedSFNet):
+                support = self.backbone.forward(support, is_support=True)
+            else:
+                support = self.backbone.forward(support)  # (shot, channels, s, s)
             support = support.mean(0).unsqueeze(0)
             s_list.append(support)
         s = torch.cat(s_list)  # (way, channels, s, s)
